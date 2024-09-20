@@ -11,9 +11,15 @@
         path: /boot/dietpi/.version
       register: dietpi_version_file
 
+    - name: Check if dietpi-update exists
+      command: which dietpi-update
+      register: dietpi_update_check
+      ignore_errors: yes
+      changed_when: false
+
     - name: Set fact for system type
       set_fact:
-        is_dietpi: "{{ dietpi_version_file.stat.exists | default(false) }}"
+        is_dietpi: "{{ dietpi_version_file.stat.exists | default(false) and dietpi_update_check.rc == 0 }}"
 
     - name: Check for updates (Standard systems)
       apt:
