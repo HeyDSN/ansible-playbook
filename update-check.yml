@@ -1,0 +1,47 @@
+---
+- hosts: all
+  become: yes
+  tasks:
+    - name: Check for updates (Standard systems)
+      apt:
+        update_cache: yes
+      register: apt_update_result
+      when: inventory_hostname in groups['standard_vms']
+
+    - name: Count available updates (Standard systems)
+      shell: /usr/lib/update-notifier/apt-check --human-readable | grep 'packages can be updated' | cut -d ' ' -f 1
+      register: updates_count_standard
+      changed_when: false
+      when: inventory_hostname in groups['standard_vms']
+
+    - name: Check for updates (DietPi systems)
+      command: dietpi-update --check
+      register: dietpi_update_result
+      changed_when: false
+      when: inventory_hostname in groups['dietpi_vms']
+
+    - name: Count available updates (DietPi systems)
+      shell: dietpi-update --available | grep -c 'Update available'
+      register: updates_count_dietpi
+      changed_when: false
+      when: inventory_hostname in groups['dietpi_vms']
+
+    - name: Set fact for update count
+      set_fact:
+        update_count: "{{ updates_count_standard.stdout|default('0')|int if inventory_hostname in groups['standard_vms'] else updates_count_dietpi.stdout|default('0')|int }}"
+
+    - name: Notify if updates are available
+      debug:
+        msg: "{{ update_count }} updates are available on {{ inventory_hostname }}"
+      when: update_count|int > 0
+
+    - name: Send email notification
+      mail:
+        host: smtp.gmail.com
+        port: 587
+        username: your_email@gmail.com
+        password: your_email_password
+        to: your_email@gmail.com
+        subject: "Updates available on {{ inventory_hostname }}"
+        body: "{{ update_count }} updates are available on {{ inventory_hostname }}"
+      when: update_count|int > 0
