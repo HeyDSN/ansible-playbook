@@ -11,11 +11,6 @@
     email_password: your_email_password
     notification_email: your_email@gmail.com
 
-  pre_tasks:
-    - name: Scan and add host keys
-      local_action: shell ssh-keyscan -H {{ inventory_hostname }} >> ~/.ssh/known_hosts
-      changed_when: false
-
   tasks:
     - name: Check for updates (Standard systems)
       apt:
