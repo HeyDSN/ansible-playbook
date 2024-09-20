@@ -55,72 +55,37 @@
         update_count: "{{ updates_count_dietpi.stdout|default('0')|int }}"
       when: is_dietpi
 
-    - name: Create custom fact directory
-      file:
-        path: /etc/ansible/facts.d
-        state: directory
-        mode: '0755'
-
-    - name: Create custom fact file
-      copy:
-        content: |
-          #!/bin/bash
-          echo '{
-            "hostname": "{{ inventory_hostname }}",
-            "system_type": "{{ 'DietPi' if is_dietpi else 'Standard' }}",
-            "update_count": {{ update_count|int }},
-            "upgradable_packages": {{ upgradable_packages.stdout_lines|default([])|to_json }}
-          }'
-        dest: /etc/ansible/facts.d/update_info.fact
-        mode: '0755'
-
-- hosts: all
-  gather_facts: yes
-  tasks:
-    - name: Refresh facts
-      setup:
-        filter: ansible_local
-
-- hosts: localhost
-  gather_facts: no
-  tasks:
-    - name: Collect all hosts update info
-      set_fact:
-        all_hosts_update_info: "{{ groups['all'] | map('extract', hostvars, ['ansible_local', 'update_info']) | list }}"
-
-    - name: Prepare combined Discord notification message
+    - name: Prepare Discord notification message
       set_fact:
         discord_message:
           embeds:
-            - title: "System Updates Available"
+            - title: "Update Available on {{ inventory_hostname }}"
               color: 15158332  # Red color
-              fields: >
-                {% for host in all_hosts_update_info %}
-                {% if host.update_count > 0 %}
-                  - name: "{{ host.hostname }} ({{ host.system_type }})"
-                    value: "{{ host.update_count }} updates available"
-                    inline: true
-                {% endif %}
-                {% endfor %}
-              description: >
-                {% for host in all_hosts_update_info %}
-                {% if host.update_count > 0 %}
-                **{{ host.hostname }} ({{ host.system_type }}):**
-                {% if host.system_type == 'Standard' %}
+              fields:
+                - name: "Updates Available"
+                  value: "{{ update_count }}"
+                  inline: true
+                - name: "Host"
+                  value: "{{ inventory_hostname }}"
+                  inline: true
+                - name: "System Type"
+                  value: "{{ 'DietPi' if is_dietpi else 'Standard' }}"
+                  inline: true
+              description: |-
+                {% if not is_dietpi and upgradable_packages.stdout_lines | length > 0 %}
+                **Upgradable packages:**
                 ```
-                {% for package in host.upgradable_packages %}
+                {% for package in upgradable_packages.stdout_lines %}
                 {{ package }}
 
                 {% endfor %}
                 ```
-                {% else %}
+                {% elif is_dietpi %}
                 DietPi updates available. Please run `dietpi-update` manually for details.
                 {% endif %}
+      when: update_count|int > 0
 
-                {% endif %}
-                {% endfor %}
-
-    - name: Send combined Discord notification
+    - name: Send Discord notification
       uri:
         url: "{{ lookup('env', 'DISCORD_WEBHOOK_URL') }}"
         method: POST
@@ -128,10 +93,10 @@
         body: "{{ discord_message }}"
         status_code: [204, 200]  # Accept both 204 and 200 as success
       when: 
-        - all_hosts_update_info | selectattr('update_count', 'gt', 0) | list | length > 0
+        - update_count|int > 0
         - lookup('env', 'DISCORD_WEBHOOK_URL') | length > 0
 
-    - name: Debug - Show combined notification message
+    - name: Notify if updates are available (Debug)
       debug:
         var: discord_message
-      when: all_hosts_update_info | selectattr('update_count', 'gt', 0) | list | length > 0
+      when: update_count|int > 0
