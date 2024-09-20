@@ -58,7 +58,8 @@
                 **Upgradable packages:**
                 ```
                 {% for package in upgradable_packages.stdout_lines %}
-                {{ "%-70s"|format(package.split('[')[0]) }}[{{ package.split('[')[1] }}
+                {{ package }}
+
                 {% endfor %}
                 ```
                 {% endif %}
