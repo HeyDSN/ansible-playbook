@@ -1,44 +1,53 @@
 ---
 - hosts: all
-  gather_facts: no
+  gather_facts: yes
   become: yes
   vars:
     ansible_ssh_args: '-o ControlMaster=no -o ControlPersist=no'
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
   tasks:
+    - name: Determine if system is DietPi
+      stat:
+        path: /boot/dietpi/.version
+      register: dietpi_version_file
+
+    - name: Set fact for system type
+      set_fact:
+        is_dietpi: "{{ dietpi_version_file.stat.exists | default(false) }}"
+
     - name: Check for updates (Standard systems)
       apt:
         update_cache: yes
-      when: "'standard_vms' in group_names"
+      when: not is_dietpi
       register: apt_update_result
 
     - name: Get list of upgradable packages (Standard systems)
       shell: apt list --upgradable 2>/dev/null | grep -v '^Listing...'
       register: upgradable_packages
       changed_when: false
-      when: "'standard_vms' in group_names"
+      when: not is_dietpi
 
     - name: Count available updates (Standard systems)
       set_fact:
         update_count: "{{ upgradable_packages.stdout_lines | length }}"
-      when: "'standard_vms' in group_names"
+      when: not is_dietpi
 
     - name: Check for updates (DietPi systems)
       command: dietpi-update --check
       register: dietpi_update_result
       changed_when: false
-      when: "'dietpi_vms' in group_names"
+      when: is_dietpi
 
     - name: Count available updates (DietPi systems)
       shell: dietpi-update --available | grep -c 'Update available'
       register: updates_count_dietpi
       changed_when: false
-      when: "'dietpi_vms' in group_names"
+      when: is_dietpi
 
     - name: Set fact for update count (DietPi systems)
       set_fact:
         update_count: "{{ updates_count_dietpi.stdout|default('0')|int }}"
-      when: "'dietpi_vms' in group_names"
+      when: is_dietpi
 
     - name: Prepare Discord notification message
       set_fact:
@@ -53,8 +62,11 @@
                 - name: "Host"
                   value: "{{ inventory_hostname }}"
                   inline: true
+                - name: "System Type"
+                  value: "{{ 'DietPi' if is_dietpi else 'Standard' }}"
+                  inline: true
               description: |-
-                {% if 'standard_vms' in group_names and upgradable_packages.stdout_lines | length > 0 %}
+                {% if not is_dietpi and upgradable_packages.stdout_lines | length > 0 %}
                 **Upgradable packages:**
                 ```
                 {% for package in upgradable_packages.stdout_lines %}
@@ -62,6 +74,8 @@
 
                 {% endfor %}
                 ```
+                {% elif is_dietpi %}
+                DietPi updates available. Please run `dietpi-update` manually for details.
                 {% endif %}
       when: update_count|int > 0
 
