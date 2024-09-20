@@ -12,15 +12,15 @@
       when: "'standard_vms' in group_names"
       register: apt_update_result
 
-    - name: Count available updates (Standard systems)
-      shell: |
-        if command -v /usr/lib/update-notifier/apt-check &> /dev/null; then
-          /usr/lib/update-notifier/apt-check --human-readable | grep 'packages can be updated' | cut -d ' ' -f 1
-        else
-          apt list --upgradable 2>/dev/null | grep -c upgradable
-        fi
-      register: updates_count_standard
+    - name: Get list of upgradable packages (Standard systems)
+      shell: apt list --upgradable 2>/dev/null | grep -v '^Listing...'
+      register: upgradable_packages
       changed_when: false
+      when: "'standard_vms' in group_names"
+
+    - name: Count available updates (Standard systems)
+      set_fact:
+        update_count: "{{ upgradable_packages.stdout_lines | length }}"
       when: "'standard_vms' in group_names"
 
     - name: Check for updates (DietPi systems)
@@ -35,13 +35,26 @@
       changed_when: false
       when: "'dietpi_vms' in group_names"
 
-    - name: Set fact for update count
+    - name: Set fact for update count (DietPi systems)
       set_fact:
-        update_count: "{{ updates_count_standard.stdout|default('0')|int if 'standard_vms' in group_names else updates_count_dietpi.stdout|default('0')|int }}"
+        update_count: "{{ updates_count_dietpi.stdout|default('0')|int }}"
+      when: "'dietpi_vms' in group_names"
+
+    - name: Prepare notification message
+      set_fact:
+        notification_message: |-
+          {{ update_count }} updates are available on {{ inventory_hostname }}
+          {% if 'standard_vms' in group_names and upgradable_packages.stdout_lines | length > 0 %}
+          
+          Upgradable packages:
+          {% for package in upgradable_packages.stdout_lines %}
+          {{ package }}
+          {% endfor %}
+          {% endif %}
 
     - name: Notify if updates are available
       debug:
-        msg: "{{ update_count }} updates are available on {{ inventory_hostname }}"
+        msg: "{{ notification_message }}"
       when: update_count|int > 0
 
     - name: Send Discord notification
@@ -50,7 +63,7 @@
         method: POST
         body_format: json
         body:
-          content: "{{ update_count }} updates are available on {{ inventory_hostname }}"
+          content: "{{ notification_message }}"
       when: 
         - update_count|int > 0
         - lookup('env', 'DISCORD_WEBHOOK_URL') | length > 0
