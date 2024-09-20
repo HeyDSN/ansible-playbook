@@ -55,22 +55,38 @@
         update_count: "{{ updates_count_dietpi.stdout|default('0')|int }}"
       when: is_dietpi
 
-    - name: Set host update info
-      set_stats:
-        data:
-          host_update_info: 
-            hostname: "{{ inventory_hostname }}"
-            system_type: "{{ 'DietPi' if is_dietpi else 'Standard' }}"
-            update_count: "{{ update_count|int }}"
-            upgradable_packages: "{{ upgradable_packages.stdout_lines|default([]) }}"
-        per_host: yes
+    - name: Create custom fact directory
+      file:
+        path: /etc/ansible/facts.d
+        state: directory
+        mode: '0755'
+
+    - name: Create custom fact file
+      copy:
+        content: |
+          #!/bin/bash
+          echo '{
+            "hostname": "{{ inventory_hostname }}",
+            "system_type": "{{ 'DietPi' if is_dietpi else 'Standard' }}",
+            "update_count": {{ update_count|int }},
+            "upgradable_packages": {{ upgradable_packages.stdout_lines|default([])|to_json }}
+          }'
+        dest: /etc/ansible/facts.d/update_info.fact
+        mode: '0755'
+
+- hosts: all
+  gather_facts: yes
+  tasks:
+    - name: Refresh facts
+      setup:
+        filter: ansible_local
 
 - hosts: localhost
   gather_facts: no
   tasks:
     - name: Collect all hosts update info
       set_fact:
-        all_hosts_update_info: "{{ groups['all'] | map('extract', hostvars, ['host_update_info']) | list }}"
+        all_hosts_update_info: "{{ groups['all'] | map('extract', hostvars, ['ansible_local', 'update_info']) | list }}"
 
     - name: Prepare combined Discord notification message
       set_fact:
