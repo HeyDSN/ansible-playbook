@@ -5,12 +5,6 @@
   vars:
     ansible_ssh_args: '-o ControlMaster=no -o ControlPersist=no'
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
-    smtp_host: smtp.gmail.com
-    smtp_port: 587
-    email_username: your_email@gmail.com
-    email_password: your_email_password
-    notification_email: your_email@gmail.com
-
   tasks:
     - name: Check for updates (Standard systems)
       apt:
@@ -50,13 +44,13 @@
         msg: "{{ update_count }} updates are available on {{ inventory_hostname }}"
       when: update_count|int > 0
 
-    - name: Send email notification
-      community.general.mail:
-        host: "{{ smtp_host }}"
-        port: "{{ smtp_port }}"
-        username: "{{ email_username }}"
-        password: "{{ email_password }}"
-        to: "{{ notification_email }}"
-        subject: "Updates available on {{ inventory_hostname }}"
-        body: "{{ update_count }} updates are available on {{ inventory_hostname }}"
-      when: update_count|int > 0
+    - name: Send Discord notification
+      uri:
+        url: "{{ lookup('env', 'DISCORD_WEBHOOK_URL') }}"
+        method: POST
+        body_format: json
+        body:
+          content: "{{ update_count }} updates are available on {{ inventory_hostname }}"
+      when: 
+        - update_count|int > 0
+        - lookup('env', 'DISCORD_WEBHOOK_URL') | length > 0
