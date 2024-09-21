@@ -123,9 +123,9 @@
                 - name: "📦 LXC Containers"
                   value: "{{ lxc_metrics.stdout_lines | select('match', '^•.*') | join('\n') }}"
                 - name: "⛔ System Alerts"
-                  value: "{{ alerts | trim | replace('\\n', '\n') }}"
+                  value: "{{ sys_alerts | trim | replace('\\n', '\n') }}"
                 - name: "⚠️ Guests Alerts"
-                  value: "{{ alerts | trim | replace('\\n', '\n') }}"
+                  value: "{{ guest_alerts | trim | replace('\\n', '\n') }}"
               footer:
                 text: "Report generated on {{ ansible_date_time.iso8601 }}"
 
