@@ -65,15 +65,15 @@
                 "fields": [
                   {
                     "name": "System Metrics",
-                    "value": "**CPU Usage**: {{ system_metrics.stdout_lines[0].split(': ')[1] }}%\n**Memory Usage**: {{ system_metrics.stdout_lines[1].split(': ')[1] }}%\n**Storage Usage**: {{ system_metrics.stdout_lines[2].split(': ')[1] }}"
+                    "value": "**CPU Usage**: {{ system_metrics.stdout_lines[0].split(': ')[1] | trim }}%\n**Memory Usage**: {{ system_metrics.stdout_lines[1].split(': ')[1] | trim }}%\n**Storage Usage**: {{ system_metrics.stdout_lines[2].split(': ')[1] | trim }}"
                   },
                   {
                     "name": "Virtual Machines",
-                    "value": "{{ vm_metrics.stdout | to_json | replace('\\n', '\\\\n') }}"
+                    "value": "{{ vm_metrics.stdout | to_nice_json | replace('\\n', '\\\\n') }}"
                   },
                   {
                     "name": "LXC Containers",
-                    "value": "{{ lxc_metrics.stdout | to_json | replace('\\n', '\\\\n') }}"
+                    "value": "{{ lxc_metrics.stdout | to_nice_json | replace('\\n', '\\\\n') }}"
                   }
                 ]
               }
@@ -85,6 +85,8 @@
         url: "{{ discord_webhook }}"
         method: POST
         body_format: json
-        body: "{{ performance_report }}"
+        body: "{{ performance_report | to_json }}"
+        headers:
+          Content-Type: "application/json"
         status_code: [204, 200]
       when: discord_webhook | length > 0
