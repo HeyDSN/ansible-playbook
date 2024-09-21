@@ -15,36 +15,37 @@
 
     - name: Get list of manually held packages
       shell: apt-mark showhold
-      register: held_packages
+      register: manually_held_packages
       changed_when: false
 
-    - name: Get list of all upgradable packages (including system-held)
-      shell: |
-        apt-get --simulate upgrade | grep '^Inst' | awk '{print $2}' | sort -u
+    - name: Get list of all upgradable packages
+      shell: apt list --upgradable 2>/dev/null | grep -v '^Listing...' | cut -d'/' -f1
       register: all_upgradable_packages
       changed_when: false
 
-    - name: Get list of actually upgradable packages
-      shell: |
-        apt-get --simulate dist-upgrade | grep '^Inst' | awk '{print $2}' | sort -u
-      register: dist_upgradable_packages
+    - name: Get list of packages that would be upgraded
+      shell: apt-get --simulate dist-upgrade | grep '^Inst' | awk '{print $2}'
+      register: would_be_upgraded
       changed_when: false
 
     - name: Identify system-held packages
       set_fact:
-        system_held_packages: "{{ all_upgradable_packages.stdout_lines | difference(dist_upgradable_packages.stdout_lines) }}"
+        system_held_packages: "{{ all_upgradable_packages.stdout_lines | difference(would_be_upgraded.stdout_lines) | difference(manually_held_packages.stdout_lines) }}"
 
-    - name: Combine manually and system-held packages
-      set_fact:
-        all_held_packages: "{{ held_packages.stdout_lines + system_held_packages }}"
-
-    - name: Get final list of upgradable packages (excluding all held packages)
-      set_fact:
-        upgradable_packages: "{{ dist_upgradable_packages.stdout_lines | difference(all_held_packages) }}"
+    - name: Get details of upgradable packages
+      shell: |
+        apt list --upgradable 2>/dev/null | grep -v '^Listing...' | while read line; do
+          pkg=$(echo $line | cut -d'/' -f1)
+          if echo "{{ would_be_upgraded.stdout_lines | join(' ') }}" | grep -q "$pkg"; then
+            echo "$line"
+          fi
+        done
+      register: upgradable_packages_details
+      changed_when: false
 
     - name: Count available updates
       set_fact:
-        update_count: "{{ upgradable_packages | length }}"
+        update_count: "{{ would_be_upgraded.stdout_lines | length }}"
 
     - name: Prepare Discord notification message
       set_fact:
@@ -63,18 +64,17 @@
                 {% if update_count|int > 0 %}
                 **📋 Upgradable packages:**
                 ```
-                {% for package in upgradable_packages %}
+                {% for package in upgradable_packages_details.stdout_lines %}
                 • {{ package }}
-                
                 {% endfor %}
                 ```
                 {% else %}
                 **✅ System is up to date!**
                 {% endif %}
-                {% if held_packages.stdout_lines|length > 0 or system_held_packages|length > 0 %}
+                {% if manually_held_packages.stdout_lines|length > 0 or system_held_packages|length > 0 %}
                 **🔒 Held packages (excluded from update):**
                 ```
-                {% for package in held_packages.stdout_lines %}
+                {% for package in manually_held_packages.stdout_lines %}
                 • {{ package }} (manually held)
                 {% endfor %}
                 {% for package in system_held_packages %}
