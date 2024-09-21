@@ -34,33 +34,35 @@
       set_fact:
         discord_message:
           embeds:
-            - title: "Update Available on {{ inventory_hostname }}"
-              color: 15158332  # Red color
+            - title: "🔄 Update Check for {{ inventory_hostname }}"
+              color: "{{ '15158332' if update_count|int > 0 else '3066993' }}"  # Red if updates, Green if no updates
               fields:
-                - name: "Updates Available"
-                  value: "{{ update_count }}"
-                  inline: true
-                - name: "Host"
+                - name: "🖥️ Host"
                   value: "{{ inventory_hostname }}"
+                  inline: true
+                - name: "📦 Updates Available"
+                  value: "{{ update_count }}"
                   inline: true
               description: |-
                 {% if upgradable_packages.stdout_lines | length > 0 %}
-                **Upgradable packages:**
+                **📋 Upgradable packages:**
                 ```
                 {% for package in upgradable_packages.stdout_lines %}
-                {{ package }}
-                
+                • {{ package | regex_replace('^(\\S+).*$', '\\1') }}
                 {% endfor %}
                 ```
+                {% else %}
+                **✅ System is up to date!**
                 {% endif %}
                 {% if held_packages.stdout_lines | length > 0 %}
-                **Held packages (excluded from update):**
+                **🔒 Held packages (excluded from update):**
                 ```
                 {% for package in held_packages.stdout_lines %}
-                {{ package }}
-                
+                • {{ package }}
                 {% endfor %}
                 ```
+                {% else %}
+                **🔓 No packages are being held back.**
                 {% endif %}
       when: update_count|int > 0
 
