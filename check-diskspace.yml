@@ -46,22 +46,29 @@
       ansible.builtin.set_fact:
         discord_message:
           embeds:
-            - title: "Disk Space Alert on {{ inventory_hostname }}"
+            - title: "💾 Disk Space Alert for {{ inventory_hostname }}"
               color: 15158332  # Red color
               fields:
-                - name: "Host"
+                - name: "🖥️ Host"
                   value: "{{ inventory_hostname }}"
                   inline: true
-                - name: "Threshold"
+                - name: "🚨 Threshold"
                   value: "{{ threshold_percent }}%"
+                  inline: true
+                - name: "🔴 Disks Over Threshold"
+                  value: "{{ disks_over_threshold | length }}"
                   inline: true
               description: |-
                 The following disks are over {{ threshold_percent }}% usage:
+
                 {% for disk in disks_over_threshold %}
-                - Device: {{ disk.device }}
-                  Usage: {{ disk.usage }}%
-                  Mount: {{ disk.mount }}
+                **📀 Device:** `{{ disk.device }}`
+                **📊 Usage:** `{{ disk.usage }}%`
+                **📁 Mount:** `{{ disk.mount }}`
+                
                 {% endfor %}
+                
+                Please check and free up space if necessary.
       when: disks_over_threshold | length > 0
 
     - name: Send Discord notification
