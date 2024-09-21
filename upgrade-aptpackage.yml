@@ -46,10 +46,24 @@
       register: apt_autoremove_result
       when: autoremovable_packages | length > 0
 
+    - name: Perform apt autoclean
+      apt:
+        autoclean: yes
+      register: apt_autoclean_result
+
+    - name: Perform apt clean
+      command: apt-get clean
+      register: apt_clean_result
+
     - name: Check if reboot is required
       stat:
         path: /var/run/reboot-required
       register: reboot_required_file
+
+    - name: Get disk space saved
+      shell: du -sh /var/cache/apt/archives
+      register: disk_space_saved
+      changed_when: false
 
     - name: Set notification flag
       set_fact:
@@ -59,7 +73,7 @@
       set_fact:
         discord_message:
           embeds:
-            - title: "🔄 Apt Upgrade Report for {{ inventory_hostname }}"
+            - title: "🔄 Apt Upgrade and Cleanup Report for {{ inventory_hostname }}"
               color: "{{ '15158332' if reboot_required_file.stat.exists else '3066993' }}"
               fields:
                 - name: "🖥️ Host"
@@ -70,6 +84,9 @@
                   inline: true
                 - name: "🗑️ Removed Packages"
                   value: "{{ autoremovable_packages | length }}"
+                  inline: true
+                - name: "💾 Disk Space in Cache"
+                  value: "{{ disk_space_saved.stdout.split()[0] }}"
                   inline: true
               description: |-
                 {% if reboot_required_file.stat.exists %}
@@ -98,6 +115,11 @@
                 {% else %}
                 **🗑️ No packages were autoremoved.**
                 {% endif %}
+
+                **🧹 Cleanup Operations:**
+                • Autoremove: {{ 'Performed' if autoremovable_packages | length > 0 else 'No packages to remove' }}
+                • Autoclean: Performed
+                • Clean: Performed
 
                 {% if held_packages.stdout_lines | length > 0 %}
                 **🔒 Held Packages:**
