@@ -1,0 +1,57 @@
+---
+- hosts: all
+  gather_facts: yes
+  become: yes
+  vars:
+    ansible_ssh_args: '-o ControlMaster=no -o ControlPersist=no'
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+    threshold_percent: 70
+  tasks:
+    - name: Get disk space usage
+      ansible.builtin.shell: df -h | awk '{if (NR!=1) {print $1,$5,$6}}' | grep -vE '^tmpfs|^udev|^/dev/loop'
+      register: disk_usage
+      changed_when: false
+
+    - name: Parse disk usage and check threshold
+      ansible.builtin.set_fact:
+        disks_over_threshold: "{{ disk_usage.stdout_lines | select('regex', '(\\d+)%.*') | list | json_query('[?parse_json(@).usage > `' + threshold_percent|string + '`]') }}"
+      vars:
+        parse_json: >
+          {{ '{{"device":"' + item.split()[0] + '","usage":' + item.split()[1].replace('%','') + ',"mount":"' + item.split()[2] + '"}}' }}
+
+    - name: Prepare Discord notification message
+      ansible.builtin.set_fact:
+        discord_message:
+          embeds:
+            - title: "Disk Space Alert on {{ inventory_hostname }}"
+              color: 15158332  # Red color
+              fields:
+                - name: "Host"
+                  value: "{{ inventory_hostname }}"
+                  inline: true
+                - name: "Threshold"
+                  value: "{{ threshold_percent }}%"
+                  inline: true
+              description: |-
+                The following disks are over {{ threshold_percent }}% usage:
+                {% for disk in disks_over_threshold %}
+                - Device: {{ disk.device }}
+                  Usage: {{ disk.usage }}%
+                  Mount: {{ disk.mount }}
+                {% endfor %}
+      when: disks_over_threshold | length > 0
+
+    - name: Send Discord notification
+      ansible.builtin.uri:
+        url: "{{ lookup('env', 'DISCORD_WEBHOOK_URL') }}"
+        method: POST
+        body_format: json
+        body: "{{ discord_message }}"
+        status_code: [204, 200]  # Accept both 204 and 200 as success
+      when: 
+        - disks_over_threshold | length > 0
+        - lookup('env', 'DISCORD_WEBHOOK_URL') | length > 0
+
+    - name: Debug disk usage (always show)
+      ansible.builtin.debug:
+        var: disk_usage.stdout_lines
