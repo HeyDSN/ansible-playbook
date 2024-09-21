@@ -13,24 +13,38 @@
         update_cache: yes
       register: apt_update_result
 
-    - name: Get list of held packages
+    - name: Get list of manually held packages
       shell: apt-mark showhold
       register: held_packages
       changed_when: false
 
-    - name: Get list of upgradable packages (excluding held packages)
+    - name: Get list of all upgradable packages (including system-held)
       shell: |
-        apt list --upgradable 2>/dev/null | grep -v '^Listing...' | cut -d'/' -f1 | while read pkg; do
-          if ! echo "{{ held_packages.stdout_lines | join(' ') }}" | grep -q "$pkg"; then
-            apt list --upgradable 2>/dev/null | grep "^$pkg/"
-          fi
-        done
-      register: upgradable_packages
+        apt-get --simulate upgrade | grep '^Inst' | awk '{print $2}' | sort -u
+      register: all_upgradable_packages
       changed_when: false
+
+    - name: Get list of actually upgradable packages
+      shell: |
+        apt-get --simulate dist-upgrade | grep '^Inst' | awk '{print $2}' | sort -u
+      register: dist_upgradable_packages
+      changed_when: false
+
+    - name: Identify system-held packages
+      set_fact:
+        system_held_packages: "{{ all_upgradable_packages.stdout_lines | difference(dist_upgradable_packages.stdout_lines) }}"
+
+    - name: Combine manually and system-held packages
+      set_fact:
+        all_held_packages: "{{ held_packages.stdout_lines + system_held_packages }}"
+
+    - name: Get final list of upgradable packages (excluding all held packages)
+      set_fact:
+        upgradable_packages: "{{ dist_upgradable_packages.stdout_lines | difference(all_held_packages) }}"
 
     - name: Count available updates
       set_fact:
-        update_count: "{{ upgradable_packages.stdout_lines | length }}"
+        update_count: "{{ upgradable_packages | length }}"
 
     - name: Prepare Discord notification message
       set_fact:
@@ -49,19 +63,22 @@
                 {% if update_count|int > 0 %}
                 **📋 Upgradable packages:**
                 ```
-                {% for package in upgradable_packages.stdout_lines %}
-                • {{ package | regex_replace('^(\\S+).*$', '\\1') }}
+                {% for package in upgradable_packages %}
+                • {{ package }}
                 
                 {% endfor %}
                 ```
                 {% else %}
                 **✅ System is up to date!**
                 {% endif %}
-                {% if held_packages.stdout_lines | length > 0 %}
+                {% if held_packages.stdout_lines|length > 0 or system_held_packages|length > 0 %}
                 **🔒 Held packages (excluded from update):**
                 ```
                 {% for package in held_packages.stdout_lines %}
-                • {{ package }}
+                • {{ package }} (manually held)
+                {% endfor %}
+                {% for package in system_held_packages %}
+                • {{ package }} (system held)
                 {% endfor %}
                 ```
                 {% else %}
