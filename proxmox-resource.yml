@@ -1,0 +1,85 @@
+---
+- name: Proxmox Resource Optimization
+  hosts: proxmox_node
+  become: yes
+  vars:
+    ansible_ssh_args: '-o ControlMaster=no -o ControlPersist=no'
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+    discord_webhook: "{{ lookup('env', 'ADW_PROXMOX') }}"
+    cpu_underuse_threshold: 20  # CPU usage below this % is considered underutilized
+    memory_underuse_threshold: 30  # Memory usage below this % is considered underutilized
+    overcommit_ratio: 1.5  # Ratio for suggesting resource reallocation
+
+  tasks:
+    - name: Collect VM and LXC resource usage
+      shell: |
+        echo "VM Resource Usage:"
+        qm list | tail -n +2 | while read vm; do
+          vmid=$(echo $vm | awk '{print $1}')
+          name=$(echo $vm | awk '{print $2}')
+          status=$(echo $vm | awk '{print $3}')
+          if [ "$status" == "running" ]; then
+            cpu=$(qm monitor $vmid | grep "CPU Usage" | awk '{print $4}')
+            mem=$(qm monitor $vmid | grep "balloon" | awk '{print $2 / $4 * 100}')
+            echo "$name,$vmid,$cpu,$mem"
+          fi
+        done
+        echo "LXC Resource Usage:"
+        pct list | tail -n +2 | while read ct; do
+          ctid=$(echo $ct | awk '{print $1}')
+          name=$(echo $ct | awk '{print $3}')
+          status=$(echo $ct | awk '{print $2}')
+          if [ "$status" == "running" ]; then
+            cpu=$(pct exec $ctid -- top -bn1 | grep "Cpu(s)" | sed "s/.*, *\([0-9.]*\)%* id.*/\1/" | awk '{print 100 - $1}')
+            mem=$(pct exec $ctid -- free | grep Mem | awk '{print $3/$2 * 100.0}')
+            echo "$name,$ctid,$cpu,$mem"
+          fi
+        done
+      register: resource_usage
+
+    - name: Analyze resource usage and generate optimization report
+      set_fact:
+        optimization_report:
+          embeds:
+            - title: "🔧 Proxmox Resource Optimization Report"
+              color: 3066993
+              fields:
+                - name: "💡 Optimization Suggestions"
+                  value: |-
+                    {% set underutilized = [] %}
+                    {% for line in resource_usage.stdout_lines %}
+                      {% if ',' in line %}
+                        {% set parts = line.split(',') %}
+                        {% if parts[2] | float < cpu_underuse_threshold or parts[3] | float < memory_underuse_threshold %}
+                          {% set _ = underutilized.append(parts) %}
+                        {% endif %}
+                      {% endif %}
+                    {% endfor %}
+                    {% if underutilized | length > 0 %}
+                    Underutilized resources detected:
+                    {% for vm in underutilized %}
+                    - {{ vm[0] }} (ID: {{ vm[1] }}):
+                      CPU: {{ vm[2] }}%, Memory: {{ vm[3] }}%
+                      Suggestion: Consider reducing allocated resources or migrating workloads.
+                    {% endfor %}
+                    {% else %}
+                    No significantly underutilized resources detected.
+                    {% endif %}
+              description: |-
+                Based on current usage patterns, consider the following optimizations:
+                - Reallocate resources from underutilized VMs/LXCs to those needing more resources.
+                - Review and adjust resource limits for better overall utilization.
+                - Consider consolidating workloads to reduce the number of active VMs/LXCs.
+
+    - name: Send Discord notification
+      uri:
+        url: "{{ discord_webhook }}"
+        method: POST
+        body_format: json
+        body: "{{ optimization_report }}"
+        status_code: [204, 200]
+      when: discord_webhook | length > 0
+
+    - name: Display optimization report (Debug)
+      debug:
+        var: optimization_report
