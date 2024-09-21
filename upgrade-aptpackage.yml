@@ -57,6 +57,7 @@
                 ```
                 {% for package in upgradable_packages %}
                 • {{ package | regex_replace('^Inst\\s+(\\S+).*$', '\\1') }}
+                
                 {% endfor %}
                 ```
                 {% else %}
