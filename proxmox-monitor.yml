@@ -63,16 +63,16 @@
                 {% set network = system_metrics.stdout_lines[3] | float %}
                 {% set alerts = [] %}
                 {% if cpu > cpu_threshold %}
-                  {% set _ = alerts.append('High CPU usage: ' ~ cpu ~ '%') %}
+                  {% set _ = alerts.append('High CPU usage: ' ~ cpu | round(2) ~ '%') %}
                 {% endif %}
                 {% if mem > memory_threshold %}
-                  {% set _ = alerts.append('High Memory usage: ' ~ mem ~ '%') %}
+                  {% set _ = alerts.append('High Memory usage: ' ~ mem | round(2) ~ '%') %}
                 {% endif %}
                 {% if storage > storage_threshold %}
                   {% set _ = alerts.append('High Storage usage: ' ~ storage ~ '%') %}
                 {% endif %}
                 {% if network > network_threshold %}
-                  {% set _ = alerts.append('High Network usage: ' ~ network ~ ' KB/s') %}
+                  {% set _ = alerts.append('High Network usage: ' ~ network | round(2) ~ ' KB/s') %}
                 {% endif %}
                 {% if alerts | length > 0 %}
                 {{ alerts | join('\n') }}
