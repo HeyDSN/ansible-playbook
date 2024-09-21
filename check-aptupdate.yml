@@ -3,9 +3,9 @@
   gather_facts: yes
   become: yes
   vars:
+    ansible_ssh_args: '-o ControlMaster=no -o ControlPersist=no'
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
   tasks:
-    tasks:
     - name: Check for updates
       apt:
         update_cache: yes
