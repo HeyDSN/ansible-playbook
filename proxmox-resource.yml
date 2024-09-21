@@ -6,8 +6,8 @@
     ansible_ssh_args: '-o ControlMaster=no -o ControlPersist=no'
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
     discord_webhook: "{{ lookup('env', 'ADW_PROXMOX') }}"
-    cpu_underuse_threshold: 20  # CPU usage below this % is considered underutilized
-    memory_underuse_threshold: 30  # Memory usage below this % is considered underutilized
+    cpu_underuse_threshold: 40  # CPU usage below this % is considered underutilized
+    memory_underuse_threshold: 60  # Memory usage below this % is considered underutilized
     overcommit_ratio: 1.5  # Ratio for suggesting resource reallocation
 
   tasks:
@@ -47,29 +47,40 @@
                 - name: "💡 Optimization Suggestions"
                   value: |-
                     {% set underutilized = [] %}
+                    {% set overutilized = [] %}
                     {% for line in resource_usage.stdout_lines %}
                       {% if ',' in line %}
                         {% set parts = line.split(',') %}
-                        {% if parts[2] | float < cpu_underuse_threshold or parts[3] | float < memory_underuse_threshold %}
+                        {% if parts[2] | float < cpu_underuse_threshold and parts[3] | float < memory_underuse_threshold %}
                           {% set _ = underutilized.append(parts) %}
+                        {% elif parts[2] | float > 80 or parts[3] | float > 80 %}
+                          {% set _ = overutilized.append(parts) %}
                         {% endif %}
                       {% endif %}
                     {% endfor %}
-                    {% if underutilized | length > 0 %}
-                    Underutilized resources detected:
+                    {% if underutilized | length > 0 or overutilized | length > 0 %}
+                    Specific optimization suggestions:
                     {% for vm in underutilized %}
-                    - {{ vm[0] }} (ID: {{ vm[1] }}):
+                    - {{ vm[0] }} (ID: {{ vm[1] }}) is underutilized:
                       CPU: {{ vm[2] }}%, Memory: {{ vm[3] }}%
                       Suggestion: Consider reducing allocated resources or migrating workloads.
                     {% endfor %}
+                    {% for vm in overutilized %}
+                    - {{ vm[0] }} (ID: {{ vm[1] }}) is overutilized:
+                      CPU: {{ vm[2] }}%, Memory: {{ vm[3] }}%
+                      Suggestion: Consider increasing allocated resources or optimizing workloads.
+                    {% endfor %}
+                    {% if underutilized | length > 0 and overutilized | length > 0 %}
+                    Consider reallocating resources from underutilized VMs/LXCs to overutilized ones.
+                    {% endif %}
                     {% else %}
-                    No significantly underutilized resources detected.
+                    No significantly under- or over-utilized resources detected. Current resource allocation appears balanced.
                     {% endif %}
               description: |-
-                Based on current usage patterns, consider the following optimizations:
-                - Reallocate resources from underutilized VMs/LXCs to those needing more resources.
+                Based on current usage patterns, consider the following general optimizations:
                 - Review and adjust resource limits for better overall utilization.
-                - Consider consolidating workloads to reduce the number of active VMs/LXCs.
+                - Consider consolidating workloads if many VMs/LXCs are underutilized.
+                - Monitor trends over time to make informed decisions about resource allocation.
 
     - name: Send Discord notification
       uri:
