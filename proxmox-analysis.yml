@@ -5,7 +5,7 @@
   vars:
     ansible_ssh_args: '-o ControlMaster=no -o ControlPersist=no'
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
-    discord_webhook: "{{ lookup('env', 'DISCORD_LOG_ANALYSIS_WEBHOOK_URL') }}"
+    discord_webhook: "{{ lookup('env', 'ADW_PROXMOX') }}"
     log_paths:
       - "/var/log/syslog"
       - "/var/log/auth.log"
