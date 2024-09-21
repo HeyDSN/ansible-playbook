@@ -75,7 +75,7 @@
               {% set parts = line.split(' ') %}
               {% set name = parts[1] %}
               {% set id = parts[3] | regex_replace('[()]', '') %}
-              {% set cpu = parts[5] | regex_replace(',%$', '') | float %}
+              {% set cpu = parts[5] | regex_replace('%,$', '') | float %}
               {% set mem = parts[7] | regex_replace('%$', '') | float %}
               {% if cpu > cpu_threshold %}
                 {% set _ = alert_list.append('🔴 High CPU: ' ~ name ~ ' ' ~ id ~ ' (' ~ cpu | round(2) ~ '%)') %}
