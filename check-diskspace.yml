@@ -73,7 +73,7 @@
 
     - name: Send Discord notification
       ansible.builtin.uri:
-        url: "{{ lookup('env', 'DISCORD_WEBHOOK_URL') }}"
+        url: "{{ lookup('env', 'ADW_UPDATE') }}"
         method: POST
         body_format: json
         body: "{{ discord_message }}"
