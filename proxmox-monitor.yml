@@ -6,9 +6,11 @@
     ansible_ssh_args: '-o ControlMaster=no -o ControlPersist=no'
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
     discord_webhook: "{{ lookup('env', 'ADW_PROXMOX') }}"
-    cpu_threshold: 10
-    memory_threshold: 10
-    storage_threshold: 10
+    system_cpu_threshold: 60
+    system_memory_threshold: 70
+    system_storage_threshold: 70
+    guest_cpu_threshold: 70
+    guest_memory_threshold: 80
 
   tasks:
     - name: Collect system-wide performance metrics
@@ -61,19 +63,19 @@
 
           {% set parts1 = system_metrics.stdout_lines[0].split(' ') %}
           {% set scpu = parts1[2] | regex_replace('%$', '') | float %}
-          {% if scpu > cpu_threshold %}
+          {% if scpu > system_cpu_threshold %}
             {% set _ = alert_list.append('🔴 High System CPU: ' ~ scpu | round(2) ~ '%') %}
           {% endif %}
           
           {% set parts2 = system_metrics.stdout_lines[1].split(' ') %}
           {% set smem = parts2[2] | regex_replace('%$', '') | float %}
-          {% if smem > memory_threshold %}
+          {% if smem > system_memory_threshold %}
             {% set _ = alert_list.append('🟠 High System Memory: ' ~ smem | round(2) ~ '%') %}
           {% endif %}
 
           {% set parts3 = system_metrics.stdout_lines[2].split(' ') %}
           {% set sstorage = parts3[2] | regex_replace('%$', '') | float %}
-          {% if sstorage > storage_threshold %}
+          {% if sstorage > system_storage_threshold %}
             {% set _ = alert_list.append('🟡 High System Storage: ' ~ sstorage ~ '%') %}
           {% endif %}
 
@@ -95,10 +97,10 @@
               {% set id = parts[3] | regex_replace('[()]', '') %}
               {% set cpu = parts[5] | regex_replace('%,$', '') | float %}
               {% set mem = parts[7] | regex_replace('%$', '') | float %}
-              {% if cpu > cpu_threshold %}
+              {% if cpu > guest_cpu_threshold %}
                 {% set _ = alert_list.append('🔴 High CPU: ' ~ name ~ ' ' ~ id ~ ' (' ~ cpu | round(2) ~ '%)') %}
               {% endif %}
-              {% if mem > memory_threshold %}
+              {% if mem > guest_memory_threshold %}
                 {% set _ = alert_list.append('🟠 High Mem: ' ~ name ~ ' ' ~ id ~ ' (' ~ mem | round(2) ~ '%)') %}
               {% endif %}
             {% endif %}
