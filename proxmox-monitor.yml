@@ -105,7 +105,7 @@
                 - name: "📦 LXC Containers"
                   value: "{{ lxc_metrics.stdout_lines | select('match', '^•.*') | join('\n') }}"
                 - name: "⚠️ Alerts"
-                  value: "{{ alerts | trim }}"
+                  value: "{{ alerts | trim | replace('\\n', '\n') }}"
               footer:
                 text: "Report generated on {{ ansible_date_time.iso8601 }}"
 
