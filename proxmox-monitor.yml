@@ -3,6 +3,8 @@
   hosts: proxmox_node
   become: yes
   vars:
+    ansible_ssh_args: '-o ControlMaster=no -o ControlPersist=no'
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
     discord_webhook: "{{ lookup('env', 'ADW_PROXMOX') }}"
     cpu_threshold: 60  # CPU usage threshold in percentage
     memory_threshold: 60  # Memory usage threshold in percentage
