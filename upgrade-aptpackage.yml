@@ -39,34 +39,41 @@
       set_fact:
         discord_message:
           embeds:
-            - title: "Apt Upgrade Report for {{ inventory_hostname }}"
-              color: 3066993  # Green color
+            - title: "🔄 Apt Upgrade Report for {{ inventory_hostname }}"
+              color: "{{ '3066993' if upgradable_packages | length > 0 else '15844367' }}"
               fields:
-                - name: "Host"
+                - name: "🖥️ Host"
                   value: "{{ inventory_hostname }}"
                   inline: true
-                - name: "Reboot Required"
-                  value: "{{ 'Yes' if reboot_required_file.stat.exists else 'No' }}"
+                - name: "🔄 Reboot Required"
+                  value: "{{ '✅ Yes' if reboot_required_file.stat.exists else '❌ No' }}"
+                  inline: true
+                - name: "📦 Upgraded Packages"
+                  value: "{{ upgradable_packages | length }}"
                   inline: true
               description: |-
-                **Upgraded Packages:**
+                {% if upgradable_packages | length > 0 %}
+                **📋 Upgraded Packages:**
                 ```
                 {% for package in upgradable_packages %}
-                {{ package }}
-                {% endfor %}
-                ```
-                
-                {% if held_packages.stdout_lines | length > 0 %}
-                **Held Packages:**
-                ```
-                {% for package in held_packages.stdout_lines %}
-                {{ package }}
+                • {{ package | regex_replace('^Inst\\s+(\\S+).*$', '\\1') }}
                 {% endfor %}
                 ```
                 {% else %}
-                No packages are being held back.
+                **📋 No packages were upgraded.**
                 {% endif %}
-                
+
+                {% if held_packages.stdout_lines | length > 0 %}
+                **🔒 Held Packages:**
+                ```
+                {% for package in held_packages.stdout_lines %}
+                • {{ package }}
+                {% endfor %}
+                ```
+                {% else %}
+                **🔓 No packages are being held back.**
+                {% endif %}
+
                 {% if reboot_required_file.stat.exists %}
                 **⚠️ A system restart is required to complete the upgrade process.**
                 {% endif %}
