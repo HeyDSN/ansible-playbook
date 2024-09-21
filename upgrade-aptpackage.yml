@@ -29,39 +29,45 @@
       apt:
         upgrade: yes
       register: apt_upgrade_result
+      when: upgradable_packages | length > 0
 
     - name: Check if reboot is required
       stat:
         path: /var/run/reboot-required
       register: reboot_required_file
 
+    - name: Set notification flag
+      set_fact:
+        should_notify: "{{ (upgradable_packages | length > 0) or reboot_required_file.stat.exists }}"
+
     - name: Prepare Discord notification message
       set_fact:
         discord_message:
           embeds:
             - title: "🔄 Apt Upgrade Report for {{ inventory_hostname }}"
-              color: "{{ '3066993' if upgradable_packages | length > 0 else '15844367' }}"
+              color: "{{ '15158332' if reboot_required_file.stat.exists else '3066993' }}"
               fields:
                 - name: "🖥️ Host"
                   value: "{{ inventory_hostname }}"
-                  inline: true
-                - name: "🔄 Reboot Required"
-                  value: "{{ '✅ Yes' if reboot_required_file.stat.exists else '❌ No' }}"
                   inline: true
                 - name: "📦 Upgraded Packages"
                   value: "{{ upgradable_packages | length }}"
                   inline: true
               description: |-
+                {% if reboot_required_file.stat.exists %}
+                **⚠️ REBOOT REQUIRED ⚠️**
+                A system restart is necessary to complete the upgrade process.
+                {% endif %}
+
                 {% if upgradable_packages | length > 0 %}
                 **📋 Upgraded Packages:**
                 ```
                 {% for package in upgradable_packages %}
                 • {{ package | regex_replace('^Inst\\s+(\\S+).*$', '\\1') }}
-                
                 {% endfor %}
                 ```
                 {% else %}
-                **📋 No packages were upgraded.**
+                **📋 No packages were upgraded in this run.**
                 {% endif %}
 
                 {% if held_packages.stdout_lines | length > 0 %}
@@ -74,10 +80,7 @@
                 {% else %}
                 **🔓 No packages are being held back.**
                 {% endif %}
-
-                {% if reboot_required_file.stat.exists %}
-                **⚠️ A system restart is required to complete the upgrade process.**
-                {% endif %}
+      when: should_notify
 
     - name: Send Discord notification
       uri:
@@ -86,8 +89,9 @@
         body_format: json
         body: "{{ discord_message }}"
         status_code: [204, 200]  # Accept both 204 and 200 as success
-      when: lookup('env', 'ADW_UPDATE') | length > 0
+      when: should_notify and lookup('env', 'ADW_UPDATE') | length > 0
 
     - name: Display upgrade report (Debug)
       debug:
         var: discord_message
+      when: should_notify
