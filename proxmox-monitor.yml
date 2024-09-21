@@ -13,6 +13,7 @@
   tasks:
     - name: Collect system-wide performance metrics
       shell: |
+        echo "System Metrics:"
         echo "CPU Usage: $(top -bn1 | grep "Cpu(s)" | sed "s/.*, *\([0-9.]*\)%* id.*/\1/" | awk '{print 100 - $1}')%"
         echo "Memory Usage: $(free | grep Mem | awk '{print $3/$2 * 100.0}')%"
         echo "Storage Usage: $(df -h / | awk '/\// {print $5}')"
@@ -25,7 +26,7 @@
           vmid=$(echo $vm | awk '{print $1}')
           name=$(echo $vm | awk '{print $2}')
           status=$(echo $vm | awk '{print $3}')
-          if [ "$status" == "running" ]; then
+          if [ "$status" = "running" ]; then
             if [ -f "/var/run/qemu-server/${vmid}.pid" ]; then
               pid=$(cat "/var/run/qemu-server/${vmid}.pid")
               vm_stats=$(top -b -n1 -p $pid | tail -n 1)
@@ -42,7 +43,7 @@
           ctid=$(echo $ct | awk '{print $1}')
           name=$(echo $ct | awk '{print $3}')
           status=$(echo $ct | awk '{print $2}')
-          if [ "$status" == "running" ]; then
+          if [ "$status" = "running" ]; then
             cpu=$(pct exec $ctid -- top -bn1 | grep "Cpu(s)" | sed "s/.*, *\([0-9.]*\)%* id.*/\1/" | awk '{print 100 - $1}')
             mem=$(pct exec $ctid -- free | grep Mem | awk '{print $3/$2 * 100.0}')
             echo "CT $name (ID: $ctid) - CPU: ${cpu}%, Memory: ${mem}%"
@@ -63,9 +64,9 @@
                   value: "{{ vm_lxc_metrics.stdout_lines | join('\n') }}"
               description: |-
                 **⚠️ Alerts:**
-                {% set cpu = system_metrics.stdout_lines[0] | regex_search('([0-9.]+)%$') | float %}
-                {% set mem = system_metrics.stdout_lines[1] | regex_search('([0-9.]+)%$') | float %}
-                {% set storage = system_metrics.stdout_lines[2] | regex_search('([0-9]+)%') | int %}
+                {% set cpu = system_metrics.stdout_lines[1] | regex_search('([0-9.]+)%$') | float %}
+                {% set mem = system_metrics.stdout_lines[2] | regex_search('([0-9.]+)%$') | float %}
+                {% set storage = system_metrics.stdout_lines[3] | regex_search('([0-9]+)%') | int %}
                 {% set alerts = [] %}
                 {% if cpu > cpu_threshold %}
                   {% set _ = alerts.append('High CPU usage: ' ~ cpu | round(2) ~ '%') %}
