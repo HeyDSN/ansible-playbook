@@ -51,6 +51,7 @@
                 ```
                 {% for package in upgradable_packages.stdout_lines %}
                 • {{ package | regex_replace('^(\\S+).*$', '\\1') }}
+                
                 {% endfor %}
                 ```
                 {% else %}
