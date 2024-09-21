@@ -3,7 +3,6 @@
   hosts: proxmox_node
   become: yes
   vars:
-    proxmox_api_host: "localhost"
     proxmox_api_user: "root@pam"
     proxmox_api_password: "{{ lookup('env', 'PROXMOX_API_PASSWORD') }}"
     discord_webhook: "{{ lookup('env', 'ADW_PB_CHECK') }}"
@@ -11,16 +10,14 @@
 
   tasks:
     - name: Get list of backups
-      proxmox_backup_info:
-        api_host: "{{ proxmox_api_host }}"
-        api_user: "{{ proxmox_api_user }}"
-        api_password: "{{ proxmox_api_password }}"
-        storage: "{{ backup_storage }}"
+      shell: |
+        pvesm list {{ backup_storage }} | grep -E 'vzdump-.*\.vma' | awk '{print $1}'
       register: backup_list
+      changed_when: false
 
     - name: Verify backup integrity
-      command: "vzdump verify {{ item.volid }}"
-      loop: "{{ backup_list.proxmox_backups }}"
+      command: "vzdump verify {{ item }}"
+      loop: "{{ backup_list.stdout_lines }}"
       register: verify_result
       ignore_errors: yes
 
@@ -32,7 +29,7 @@
               color: 3066993
               fields:
                 - name: "💾 Total Backups"
-                  value: "{{ backup_list.proxmox_backups | length }}"
+                  value: "{{ backup_list.stdout_lines | length }}"
                   inline: true
                 - name: "✅ Verified Backups"
                   value: "{{ verify_result.results | selectattr('rc', 'eq', 0) | list | length }}"
@@ -44,14 +41,14 @@
                 **📊 Backup Integrity Details:**
                 ```
                 {% for result in verify_result.results %}
-                • {{ result.item.vmid }} ({{ result.item.volid }}): {{ 'Passed' if result.rc == 0 else 'Failed' }}
+                • {{ result.item }}: {{ 'Passed' if result.rc == 0 else 'Failed' }}
                 {% endfor %}
                 ```
                 {% if verify_result.results | selectattr('rc', 'ne', 0) | list | length > 0 %}
                 **⚠️ Failed Verifications:**
                 ```
                 {% for result in verify_result.results | selectattr('rc', 'ne', 0) | list %}
-                • {{ result.item.vmid }} ({{ result.item.volid }})
+                • {{ result.item }}
                   Error: {{ result.stderr_lines | join(' ') }}
                 {% endfor %}
                 ```
