@@ -7,25 +7,40 @@
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
     threshold_percent: 70
   tasks:
-    - name: Get disk space usage
-      ansible.builtin.shell: df -h | awk '{if (NR!=1) {print $1,$5,$6}}' | grep -vE '^tmpfs|^udev|^/dev/loop'
-      register: disk_usage
+    - name: Create disk usage parser script
+      ansible.builtin.copy:
+        content: |
+          #!/usr/bin/env python3
+          import sys
+          import json
+
+          threshold = int(sys.argv[1])
+          disks_over_threshold = []
+
+          for line in sys.stdin:
+              parts = line.strip().split()
+              if len(parts) == 3:
+                  device, usage, mount = parts
+                  usage_percent = int(usage.rstrip('%'))
+                  if usage_percent > threshold:
+                      disks_over_threshold.append({
+                          'device': device,
+                          'usage': usage_percent,
+                          'mount': mount
+                      })
+
+          print(json.dumps(disks_over_threshold))
+        dest: /tmp/parse_disk_usage.py
+        mode: '0755'
+
+    - name: Get disk space usage and parse
+      ansible.builtin.shell: df -h | awk '{if (NR!=1) {print $1,$5,$6}}' | grep -vE '^tmpfs|^udev|^/dev/loop' | python3 /tmp/parse_disk_usage.py {{ threshold_percent }}
+      register: parsed_disk_usage
       changed_when: false
 
-    - name: Parse disk usage and check threshold
+    - name: Set fact for disks over threshold
       ansible.builtin.set_fact:
-        disks_over_threshold: "{{ disk_usage.stdout | parse_disk_usage(threshold_percent) }}"
-      vars:
-        parse_disk_usage: |
-          def parse_disk_usage(output, threshold):
-              disks = []
-              for line in output.split('\n'):
-                  if line.strip():
-                      device, usage, mount = line.split()
-                      usage_percent = int(usage.rstrip('%'))
-                      if usage_percent > threshold:
-                          disks.append({'device': device, 'usage': usage_percent, 'mount': mount})
-              return disks
+        disks_over_threshold: "{{ parsed_disk_usage.stdout | from_json }}"
 
     - name: Prepare Discord notification message
       ansible.builtin.set_fact:
@@ -62,4 +77,4 @@
 
     - name: Debug disk usage (always show)
       ansible.builtin.debug:
-        var: disk_usage.stdout_lines
+        var: disks_over_threshold
