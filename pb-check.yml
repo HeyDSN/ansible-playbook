@@ -3,6 +3,8 @@
   hosts: proxmox_node
   become: yes
   vars:
+    ansible_ssh_args: '-o ControlMaster=no -o ControlPersist=no'
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
     proxmox_api_user: "root@pam"
     proxmox_api_password: "{{ lookup('env', 'PROXMOX_API_PASSWORD') }}"
     discord_webhook: "{{ lookup('env', 'ADW_PB_CHECK') }}"
