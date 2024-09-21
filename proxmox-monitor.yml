@@ -13,7 +13,7 @@
   tasks:
     - name: Collect system-wide performance metrics
       shell: |
-        echo "CPU Usage: $(top -bn1 | grep "Cpu(s)" | sed "s/.*, *\([0-9.]*\)%* id.*/\1/" | awk '{print 100 - $1}')%"
+        echo "CPU Usage: $(top -bn1 | grep "Cpu(s)" | sed "s/.*, *\\([0-9.]*\\)%* id.*/\\1/" | awk '{print 100 - $1}')%"
         echo "Memory Usage: $(free | grep Mem | awk '{print $3/$2 * 100.0}')%"
         echo "Storage Usage: $(df -h / | awk '/\// {print $5}')"
       register: system_metrics
@@ -47,7 +47,7 @@
           name=$(echo $ct | awk '{print $3}')
           status=$(echo $ct | awk '{print $2}')
           if [ "$status" = "running" ]; then
-            cpu=$(pct exec $ctid -- top -bn1 | grep "Cpu(s)" | sed "s/.*, *\([0-9.]*\)%* id.*/\1/" | awk '{print 100 - $1}')
+            cpu=$(pct exec $ctid -- top -bn1 | grep "Cpu(s)" | sed "s/.*, *\\([0-9.]*\\)%* id.*/\\1/" | awk '{print 100 - $1}')
             mem=$(pct exec $ctid -- free | grep Mem | awk '{print $3/$2 * 100.0}')
             printf "• %s (ID: %s) CPU: %.1f%%, Mem: %.1f%%\n" "$name" "$ctid" $cpu $mem
           fi
@@ -56,56 +56,31 @@
 
     - name: Generate performance report
       set_fact:
-        performance_report:
-          embeds:
-            - title: "📊 Proxmox Performance Report"
-              color: 3066993
-              fields:
-                - name: "🖥️ System Metrics"
-                  value: "{{ system_metrics.stdout }}"
-                - name: "💻 Virtual Machines"
-                  value: "{{ vm_metrics.stdout_lines | select('match', '^•.*') | join('\n') }}"
-                - name: "📦 LXC Containers"
-                  value: "{{ lxc_metrics.stdout_lines | select('match', '^•.*') | join('\n') }}"
-              footer:
-                text: "Report generated on {{ ansible_date_time.iso8601 }}"
-              description: |-
-                **⚠️ Alerts:**
-                {% set cpu = system_metrics.stdout_lines[0] | regex_search('([0-9.]+)%') | first | float %}
-                {% set mem = system_metrics.stdout_lines[1] | regex_search('([0-9.]+)%') | first | float %}
-                {% set storage = system_metrics.stdout_lines[2] | regex_search('([0-9]+)%') | first | int %}
-                {% set alerts = [] %}
-                {% if cpu > cpu_threshold %}
-                  {% set _ = alerts.append('🔴 High System CPU usage: ' ~ cpu | round(2) ~ '%') %}
-                {% endif %}
-                {% if mem > memory_threshold %}
-                  {% set _ = alerts.append('🟠 High System Memory usage: ' ~ mem | round(2) ~ '%') %}
-                {% endif %}
-                {% if storage > storage_threshold %}
-                  {% set _ = alerts.append('🟡 High System Storage usage: ' ~ storage ~ '%') %}
-                {% endif %}
-                {% for line in vm_metrics.stdout_lines + lxc_metrics.stdout_lines %}
-                  {% if line.startswith('•') %}
-                    {% set parts = line.split(' ') %}
-                    {% set name = parts[1] %}
-                    {% set id = parts[3] | regex_replace('[()]', '') %}
-                    {% set cpu = parts[5] | regex_replace(',%$', '') | float %}
-                    {% set mem = parts[7] | regex_replace('%$', '') | float %}
-                    {% if cpu > cpu_threshold %}
-                      {% set _ = alerts.append('🔴 High CPU usage: ' ~ name ~ ' ' ~ id ~ ' (' ~ cpu | round(2) ~ '%)') %}
-                    {% endif %}
-                    {% if mem > memory_threshold %}
-                      {% set _ = alerts.append('🟠 High Memory usage: ' ~ name ~ ' ' ~ id ~ ' (' ~ mem | round(2) ~ '%)') %}
-                    {% endif %}
-                  {% endif %}
-                {% endfor %}
-                {% if alerts | length > 0 %}
-                {{ alerts | sort | join('\n') }}
-                {% else %}
-                ✅ No alerts at this time.
-                {% endif %}
+        performance_report: |
+          {
+            "embeds": [
+              {
+                "title": "Proxmox Performance Report",
+                "color": 16711680,
+                "fields": [
+                  {
+                    "name": "System Metrics",
+                    "value": "**CPU Usage**: {{ system_metrics.stdout_lines[0].split(': ')[1] }}\n**Memory Usage**: {{ system_metrics.stdout_lines[1].split(': ')[1] }}\n**Storage Usage**: {{ system_metrics.stdout_lines[2].split(': ')[1] }}"
+                  },
+                  {
+                    "name": "Virtual Machines",
+                    "value": "{{ vm_metrics.stdout }}"
+                  },
+                  {
+                    "name": "LXC Containers",
+                    "value": "{{ lxc_metrics.stdout }}"
+                  }
+                ]
+              }
+            ]
+          }
 
-    - name: Send Discord notification
+    - name: Send Discord notification with embed
       uri:
         url: "{{ discord_webhook }}"
         method: POST
@@ -113,7 +88,3 @@
         body: "{{ performance_report }}"
         status_code: [204, 200]
       when: discord_webhook | length > 0
-
-    - name: Display performance report (Debug)
-      debug:
-        var: performance_report
