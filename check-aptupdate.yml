@@ -11,8 +11,18 @@
         update_cache: yes
       register: apt_update_result
 
-    - name: Get list of upgradable packages
-      shell: apt list --upgradable 2>/dev/null | grep -v '^Listing...'
+    - name: Get list of held packages
+      shell: apt-mark showhold
+      register: held_packages
+      changed_when: false
+
+    - name: Get list of upgradable packages (excluding held packages)
+      shell: |
+        apt list --upgradable 2>/dev/null | grep -v '^Listing...' | cut -d'/' -f1 | while read pkg; do
+          if ! echo "{{ held_packages.stdout_lines | join(' ') }}" | grep -q "$pkg"; then
+            apt list --upgradable 2>/dev/null | grep "^$pkg/"
+          fi
+        done
       register: upgradable_packages
       changed_when: false
 
@@ -38,6 +48,15 @@
                 **Upgradable packages:**
                 ```
                 {% for package in upgradable_packages.stdout_lines %}
+                {{ package }}
+                
+                {% endfor %}
+                ```
+                {% endif %}
+                {% if held_packages.stdout_lines | length > 0 %}
+                **Held packages (excluded from update):**
+                ```
+                {% for package in held_packages.stdout_lines %}
                 {{ package }}
                 
                 {% endfor %}
