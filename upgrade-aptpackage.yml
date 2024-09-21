@@ -51,10 +51,6 @@
         autoclean: yes
       register: apt_autoclean_result
 
-    - name: Perform apt clean
-      command: apt-get clean
-      register: apt_clean_result
-
     - name: Check if reboot is required
       stat:
         path: /var/run/reboot-required
@@ -119,7 +115,6 @@
                 **🧹 Cleanup Operations:**
                 • Autoremove: {{ 'Performed' if autoremovable_packages | length > 0 else 'No packages to remove' }}
                 • Autoclean: Performed
-                • Clean: Performed
 
                 {% if held_packages.stdout_lines | length > 0 %}
                 **🔒 Held Packages:**
