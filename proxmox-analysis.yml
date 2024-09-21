@@ -1,0 +1,61 @@
+---
+- name: Proxmox Log Analysis
+  hosts: proxmox_node
+  become: yes
+  vars:
+    ansible_ssh_args: '-o ControlMaster=no -o ControlPersist=no'
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+    discord_webhook: "{{ lookup('env', 'DISCORD_LOG_ANALYSIS_WEBHOOK_URL') }}"
+    log_paths:
+      - "/var/log/syslog"
+      - "/var/log/auth.log"
+      - "/var/log/pve-firewall.log"
+    error_patterns:
+      - "error"
+      - "failed"
+      - "critical"
+    security_patterns:
+      - "authentication failure"
+      - "Failed password"
+      - "Invalid user"
+
+  tasks:
+    - name: Collect and analyze logs
+      shell: |
+        for log in {{ log_paths | join(' ') }}; do
+          echo "Analyzing $log:"
+          echo "  Errors found:"
+          grep -iE "{{ error_patterns | join('|') }}" $log | tail -n 5
+          echo "  Security incidents:"
+          grep -iE "{{ security_patterns | join('|') }}" $log | tail -n 5
+        done
+      register: log_analysis
+
+    - name: Generate log analysis report
+      set_fact:
+        log_report:
+          embeds:
+            - title: "📜 Proxmox Log Analysis Report"
+              color: 15158332  # Red color for potential issues
+              fields:
+                - name: "🔍 Log Analysis Results"
+                  value: "{{ log_analysis.stdout }}"
+              description: |-
+                Summary of recent log entries:
+                - Total errors: {{ log_analysis.stdout | regex_findall(error_patterns | join('|')) | length }}
+                - Security incidents: {{ log_analysis.stdout | regex_findall(security_patterns | join('|')) | length }}
+
+                Please review the detailed log entries for more information.
+
+    - name: Send Discord notification
+      uri:
+        url: "{{ discord_webhook }}"
+        method: POST
+        body_format: json
+        body: "{{ log_report }}"
+        status_code: [204, 200]
+      when: discord_webhook | length > 0
+
+    - name: Display log analysis report (Debug)
+      debug:
+        var: log_report
