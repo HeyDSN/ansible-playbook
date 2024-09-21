@@ -6,7 +6,7 @@
     ansible_ssh_args: '-o ControlMaster=no -o ControlPersist=no'
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
     update_required_webhook: "{{ lookup('env', 'ADW_UPDATE') }}"
-    no_update_webhook: "{{ lookup('env', 'ADW_NOTIF') }}"
+    update_held_webhook: "{{ lookup('env', 'ADW_NOTIF') }}"
   tasks:
     - name: Check for updates
       apt:
@@ -43,35 +43,37 @@
       register: upgradable_packages_details
       changed_when: false
 
-    - name: Count available updates
+    - name: Set update flags
       set_fact:
-        update_count: "{{ would_be_upgraded.stdout_lines | length }}"
+        updates_available: "{{ would_be_upgraded.stdout_lines | length > 0 }}"
+        held_updates_available: "{{ manually_held_packages.stdout_lines | length > 0 or system_held_packages | length > 0 }}"
 
     - name: Prepare Discord notification message
       set_fact:
         discord_message:
           embeds:
             - title: "🔄 Update Check for {{ inventory_hostname }}"
-              color: "{{ '15158332' if update_count|int > 0 else '3066993' }}"  # Red if updates, Green if no updates
+              color: "{{ '15158332' if updates_available else '3066993' }}"  # Red if updates available, Green if only held updates
               fields:
                 - name: "🖥️ Host"
                   value: "{{ inventory_hostname }}"
                   inline: true
                 - name: "📦 Updates Available"
-                  value: "{{ update_count }}"
+                  value: "{{ would_be_upgraded.stdout_lines | length }}"
+                  inline: true
+                - name: "🔒 Held Updates"
+                  value: "{{ (manually_held_packages.stdout_lines + system_held_packages) | length }}"
                   inline: true
               description: |-
-                {% if update_count|int > 0 %}
+                {% if updates_available %}
                 **📋 Upgradable packages:**
                 ```
                 {% for package in upgradable_packages_details.stdout_lines %}
                 • {{ package }}
                 {% endfor %}
                 ```
-                {% else %}
-                **✅ System is up to date!**
                 {% endif %}
-                {% if manually_held_packages.stdout_lines|length > 0 or system_held_packages|length > 0 %}
+                {% if held_updates_available %}
                 **🔒 Held packages (excluded from update):**
                 ```
                 {% for package in manually_held_packages.stdout_lines %}
@@ -81,11 +83,12 @@
                 • {{ package }} (system held)
                 {% endfor %}
                 ```
-                {% else %}
-                **🔓 No packages are being held back.**
+                {% endif %}
+                {% if not updates_available and not held_updates_available %}
+                **✅ System is up to date!**
                 {% endif %}
 
-    - name: Send Discord notification for updates required
+    - name: Send Discord notification for updates available
       uri:
         url: "{{ update_required_webhook }}"
         method: POST
@@ -93,19 +96,20 @@
         body: "{{ discord_message }}"
         status_code: [204, 200]  # Accept both 204 and 200 as success
       when: 
-        - update_count|int > 0
+        - updates_available
         - update_required_webhook | length > 0
 
-    - name: Send Discord notification for no updates required
+    - name: Send Discord notification for held updates
       uri:
-        url: "{{ no_update_webhook }}"
+        url: "{{ update_held_webhook }}"
         method: POST
         body_format: json
         body: "{{ discord_message }}"
         status_code: [204, 200]  # Accept both 204 and 200 as success
       when: 
-        - update_count|int == 0
-        - no_update_webhook | length > 0
+        - not updates_available
+        - held_updates_available
+        - update_held_webhook | length > 0
 
     - name: Display update check report (Debug)
       debug:
