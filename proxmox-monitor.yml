@@ -6,14 +6,13 @@
     ansible_ssh_args: '-o ControlMaster=no -o ControlPersist=no'
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
     discord_webhook: "{{ lookup('env', 'ADW_PROXMOX') }}"
-    cpu_threshold: 60  # CPU usage threshold in percentage
-    memory_threshold: 60  # Memory usage threshold in percentage
-    storage_threshold: 60  # Storage usage threshold in percentage
+    cpu_threshold: 60
+    memory_threshold: 60
+    storage_threshold: 60
 
   tasks:
     - name: Collect system-wide performance metrics
       shell: |
-        echo "System Metrics:"
         echo "CPU Usage: $(top -bn1 | grep "Cpu(s)" | sed "s/.*, *\([0-9.]*\)%* id.*/\1/" | awk '{print 100 - $1}')%"
         echo "Memory Usage: $(free | grep Mem | awk '{print $3/$2 * 100.0}')%"
         echo "Storage Usage: $(df -h / | awk '/\// {print $5}')"
@@ -32,7 +31,7 @@
               vm_stats=$(top -b -n1 -p $pid | tail -n 1)
               cpu=$(echo $vm_stats | awk '{print $9}')
               mem=$(echo $vm_stats | awk '{print $10}')
-              echo "VM $name (ID: $vmid) - CPU: ${cpu}%, Memory: ${mem}%"
+              printf "%-20s CPU: %5.1f%%, Mem: %5.1f%%\n" "VM $name (ID: $vmid)" $cpu $mem
             else
               echo "VM $name (ID: $vmid) - PID file not found"
             fi
@@ -46,7 +45,7 @@
           if [ "$status" = "running" ]; then
             cpu=$(pct exec $ctid -- top -bn1 | grep "Cpu(s)" | sed "s/.*, *\([0-9.]*\)%* id.*/\1/" | awk '{print 100 - $1}')
             mem=$(pct exec $ctid -- free | grep Mem | awk '{print $3/$2 * 100.0}')
-            echo "CT $name (ID: $ctid) - CPU: ${cpu}%, Memory: ${mem}%"
+            printf "%-20s CPU: %5.1f%%, Mem: %5.1f%%\n" "CT $name (ID: $ctid)" $cpu $mem
           fi
         done
       register: vm_lxc_metrics
@@ -59,28 +58,41 @@
               color: 3066993
               fields:
                 - name: "🖥️ System Metrics"
-                  value: "{{ system_metrics.stdout_lines | join('\n') }}"
-                - name: "💻 VM and LXC Metrics"
-                  value: "{{ vm_lxc_metrics.stdout_lines | join('\n') }}"
+                  value: |
+                    ```
+                    {{ system_metrics.stdout_lines | join('\n') }}
+                    ```
+                - name: "💻 Virtual Machines"
+                  value: |
+                    ```
+                    {{ vm_lxc_metrics.stdout_lines | select('match', '^VM') | join('\n') }}
+                    ```
+                - name: "📦 LXC Containers"
+                  value: |
+                    ```
+                    {{ vm_lxc_metrics.stdout_lines | select('match', '^CT') | join('\n') }}
+                    ```
+              footer:
+                text: "Report generated on {{ ansible_date_time.iso8601 }}"
               description: |-
                 **⚠️ Alerts:**
-                {% set cpu = system_metrics.stdout_lines[1] | regex_search('([0-9.]+)%$') | float %}
-                {% set mem = system_metrics.stdout_lines[2] | regex_search('([0-9.]+)%$') | float %}
-                {% set storage = system_metrics.stdout_lines[3] | regex_search('([0-9]+)%') | int %}
+                {% set cpu = system_metrics.stdout_lines[0] | regex_search('([0-9.]+)%$') | float %}
+                {% set mem = system_metrics.stdout_lines[1] | regex_search('([0-9.]+)%$') | float %}
+                {% set storage = system_metrics.stdout_lines[2] | regex_search('([0-9]+)%') | int %}
                 {% set alerts = [] %}
                 {% if cpu > cpu_threshold %}
-                  {% set _ = alerts.append('High CPU usage: ' ~ cpu | round(2) ~ '%') %}
+                  {% set _ = alerts.append('🔴 High CPU usage: ' ~ cpu | round(2) ~ '%') %}
                 {% endif %}
                 {% if mem > memory_threshold %}
-                  {% set _ = alerts.append('High Memory usage: ' ~ mem | round(2) ~ '%') %}
+                  {% set _ = alerts.append('🟠 High Memory usage: ' ~ mem | round(2) ~ '%') %}
                 {% endif %}
                 {% if storage > storage_threshold %}
-                  {% set _ = alerts.append('High Storage usage: ' ~ storage ~ '%') %}
+                  {% set _ = alerts.append('🟡 High Storage usage: ' ~ storage ~ '%') %}
                 {% endif %}
                 {% if alerts | length > 0 %}
                 {{ alerts | join('\n') }}
                 {% else %}
-                No alerts at this time.
+                ✅ No alerts at this time.
                 {% endif %}
 
     - name: Send Discord notification
