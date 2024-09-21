@@ -14,10 +14,11 @@
 
     - name: Parse disk usage and check threshold
       ansible.builtin.set_fact:
-        disks_over_threshold: "{{ disk_usage.stdout_lines | select('regex', '(\\d+)%.*') | list | json_query('[?parse_json(@).usage > `' + threshold_percent|string + '`]') }}"
-      vars:
-        parse_json: >
-          {{ '{{"device":"' + item.split()[0] + '","usage":' + item.split()[1].replace('%','') + ',"mount":"' + item.split()[2] + '"}}' }}
+        disks_over_threshold: >-
+          {{ disk_usage.stdout_lines | map('split') | 
+             select('length', '==', 3) | 
+             map('combine', [{'device': item[0], 'usage': item[1] | replace('%', '') | int, 'mount': item[2]}]) | 
+             select('usage', '>', threshold_percent) | list }}
 
     - name: Prepare Discord notification message
       ansible.builtin.set_fact:
