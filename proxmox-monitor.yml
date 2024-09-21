@@ -13,8 +13,8 @@
   tasks:
     - name: Collect system-wide performance metrics
       shell: |
-        echo "CPU Usage: $(top -bn1 | grep "Cpu(s)" | sed "s/.*, *\\([0-9.]*\\)%* id.*/\\1/" | awk '{print 100 - $1}')%"
-        echo "Memory Usage: $(free | grep Mem | awk '{print $3/$2 * 100.0}')%"
+        echo "CPU Usage: $(top -bn1 | grep "Cpu(s)" | sed "s/.*, *\\([0-9.]*\\)%* id.*/\\1/" | awk '{print 100 - $1}')"
+        echo "Memory Usage: $(free | grep Mem | awk '{print $3/$2 * 100.0}')"
         echo "Storage Usage: $(df -h / | awk '/\// {print $5}')"
       register: system_metrics
 
@@ -56,7 +56,7 @@
 
     - name: Generate performance report
       set_fact:
-        performance_report: |
+        performance_report: >
           {
             "embeds": [
               {
@@ -65,15 +65,15 @@
                 "fields": [
                   {
                     "name": "System Metrics",
-                    "value": "**CPU Usage**: {{ system_metrics.stdout_lines[0].split(': ')[1] }}\n**Memory Usage**: {{ system_metrics.stdout_lines[1].split(': ')[1] }}\n**Storage Usage**: {{ system_metrics.stdout_lines[2].split(': ')[1] }}"
+                    "value": "**CPU Usage**: {{ system_metrics.stdout_lines[0].split(': ')[1] }}%\n**Memory Usage**: {{ system_metrics.stdout_lines[1].split(': ')[1] }}%\n**Storage Usage**: {{ system_metrics.stdout_lines[2].split(': ')[1] }}"
                   },
                   {
                     "name": "Virtual Machines",
-                    "value": "{{ vm_metrics.stdout }}"
+                    "value": "{{ vm_metrics.stdout | to_json | replace('\\n', '\\\\n') }}"
                   },
                   {
                     "name": "LXC Containers",
-                    "value": "{{ lxc_metrics.stdout }}"
+                    "value": "{{ lxc_metrics.stdout | to_json | replace('\\n', '\\\\n') }}"
                   }
                 ]
               }
