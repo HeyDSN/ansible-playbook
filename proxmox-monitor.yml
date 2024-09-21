@@ -71,9 +71,9 @@
                 text: "Report generated on {{ ansible_date_time.iso8601 }}"
               description: |-
                 **⚠️ Alerts:**
-                {% set cpu = system_metrics.stdout_lines[0] | regex_search('([0-9.]+)%$') | float %}
-                {% set mem = system_metrics.stdout_lines[1] | regex_search('([0-9.]+)%$') | float %}
-                {% set storage = system_metrics.stdout_lines[2] | regex_search('([0-9]+)%') | int %}
+                {% set cpu = system_metrics.stdout_lines[0] | regex_search('([0-9.]+)%') | first | float %}
+                {% set mem = system_metrics.stdout_lines[1] | regex_search('([0-9.]+)%') | first | float %}
+                {% set storage = system_metrics.stdout_lines[2] | regex_search('([0-9]+)%') | first | int %}
                 {% set alerts = [] %}
                 {% if cpu > cpu_threshold %}
                   {% set _ = alerts.append('🔴 High System CPU usage: ' ~ cpu | round(2) ~ '%') %}
@@ -88,9 +88,9 @@
                   {% if line.startswith('•') %}
                     {% set parts = line.split(' ') %}
                     {% set name = parts[1] %}
-                    {% set id = parts[2] | regex_replace('[()]', '') %}
-                    {% set cpu = parts[4] | regex_replace(',$', '') | float %}
-                    {% set mem = parts[6] | regex_replace('%$', '') | float %}
+                    {% set id = parts[3] | regex_replace('[()]', '') %}
+                    {% set cpu = parts[5] | regex_replace(',%$', '') | float %}
+                    {% set mem = parts[7] | regex_replace('%$', '') | float %}
                     {% if cpu > cpu_threshold %}
                       {% set _ = alerts.append('🔴 High CPU usage for ' ~ name ~ ' ' ~ id ~ ': ' ~ cpu ~ '%') %}
                     {% endif %}
