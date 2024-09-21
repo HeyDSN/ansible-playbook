@@ -59,24 +59,24 @@
         alerts: |
           {% set alert_list = [] %}
 
-          {% set parts1 = system_metrics.stdout_lines[0].split(' ') %}
-          {% set scpu = parts1[3] | regex_replace('%$', '') | float %}
+          # {% set parts1 = system_metrics.stdout_lines[0].split(' ') %}
+          # {% set scpu = parts1[3] | regex_replace('%$', '') | float %}
+          # {% if scpu > cpu_threshold %}
+          #   {% set _ = alert_list.append('🔴 High System CPU: ' ~ scpu | round(2) ~ '%') %}
+          # {% endif %}
+          
+          # {% set parts2 = system_metrics.stdout_lines[1].split(' ') %}
+          # {% set smem = parts2[3] | regex_replace('%$', '') | float %}
+          # {% if smem > memory_threshold %}
+          #   {% set _ = alert_list.append('🟠 High System Memory: ' ~ smem | round(2) ~ '%') %}
+          # {% endif %}
 
-          {% set parts2 = system_metrics.stdout_lines[1].split(' ') %}
-          {% set smem = parts2[3] | regex_replace('%$', '') | float %}
+          # {% set parts3 = system_metrics.stdout_lines[2].split(' ') %}
+          # {% set sstorage = parts3[3] | regex_replace('%$', '') | float %}
+          # {% if sstorage > storage_threshold %}
+          #   {% set _ = alert_list.append('🟡 High System Storage: ' ~ sstorage ~ '%') %}
+          # {% endif %}
 
-          {% set parts3 = system_metrics.stdout_lines[2].split(' ') %}
-          {% set sstorage = parts3[3] | regex_replace('%$', '') | float %}
-
-          {% if scpu > cpu_threshold %}
-            {% set _ = alert_list.append('🔴 High System CPU: ' ~ scpu | round(2) ~ '%') %}
-          {% endif %}
-          {% if smem > memory_threshold %}
-            {% set _ = alert_list.append('🟠 High System Memory: ' ~ smem | round(2) ~ '%') %}
-          {% endif %}
-          {% if sstorage > storage_threshold %}
-            {% set _ = alert_list.append('🟡 High System Storage: ' ~ sstorage ~ '%') %}
-          {% endif %}
           {% for line in vm_metrics.stdout_lines + lxc_metrics.stdout_lines %}
             {% if line.startswith('•') %}
               {% set parts = line.split(' ') %}
@@ -106,7 +106,7 @@
               color: 3066993
               fields:
                 - name: "🖥️ System Metrics"
-                  value: "{{ system_metrics.stdout }}"
+                  value: "{{ system_metrics.stdout_lines[0] }}"
                 - name: "💻 Virtual Machines"
                   value: "{{ vm_metrics.stdout_lines | select('match', '^•.*') | join('\n') }}"
                 - name: "📦 LXC Containers"
