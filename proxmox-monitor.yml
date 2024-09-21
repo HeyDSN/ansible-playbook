@@ -1,0 +1,86 @@
+---
+- name: Proxmox Performance Monitoring
+  hosts: proxmox_node
+  become: yes
+  vars:
+    discord_webhook: "{{ lookup('env', 'ADW_PROXMOX') }}"
+    cpu_threshold: 60  # CPU usage threshold in percentage
+    memory_threshold: 60  # Memory usage threshold in percentage
+    storage_threshold: 60  # Storage usage threshold in percentage
+    network_threshold: 60  # Network usage threshold in percentage of max throughput
+
+  tasks:
+    - name: Collect system-wide performance metrics
+      shell: |
+        echo "CPU Usage: $(top -bn1 | grep "Cpu(s)" | sed "s/.*, *\([0-9.]*\)%* id.*/\1/" | awk '{print 100 - $1}')%"
+        echo "Memory Usage: $(free | grep Mem | awk '{print $3/$2 * 100.0}')%"
+        echo "Storage Usage: $(df -h / | awk '/\// {print $5}')"
+        echo "Network Usage: $(sar -n DEV 1 1 | awk '/eth0/ {print $5 + $6}')"
+      register: system_metrics
+
+    - name: Collect VM and LXC metrics
+      shell: |
+        qm list | tail -n +2 | while read vm; do
+          vmid=$(echo $vm | awk '{print $1}')
+          name=$(echo $vm | awk '{print $2}')
+          status=$(echo $vm | awk '{print $3}')
+          if [ "$status" == "running" ]; then
+            cpu=$(qm monitor $vmid | grep "CPU Usage" | awk '{print $4}')
+            mem=$(qm monitor $vmid | grep "balloon" | awk '{print $2 / $4 * 100}')
+            echo "VM $name (ID: $vmid) - CPU: ${cpu}%, Memory: ${mem}%"
+          fi
+        done
+        pct list | tail -n +2 | while read ct; do
+          ctid=$(echo $ct | awk '{print $1}')
+          name=$(echo $ct | awk '{print $3}')
+          status=$(echo $ct | awk '{print $2}')
+          if [ "$status" == "running" ]; then
+            cpu=$(pct exec $ctid -- top -bn1 | grep "Cpu(s)" | sed "s/.*, *\([0-9.]*\)%* id.*/\1/" | awk '{print 100 - $1}')
+            mem=$(pct exec $ctid -- free | grep Mem | awk '{print $3/$2 * 100.0}')
+            echo "CT $name (ID: $ctid) - CPU: ${cpu}%, Memory: ${mem}%"
+          fi
+        done
+      register: vm_lxc_metrics
+
+    - name: Generate performance report
+      set_fact:
+        performance_report:
+          embeds:
+            - title: "📊 Proxmox Performance Report"
+              color: 3066993
+              fields:
+                - name: "🖥️ System Metrics"
+                  value: "{{ system_metrics.stdout_lines | join('\n') }}"
+                - name: "💻 VM and LXC Metrics"
+                  value: "{{ vm_lxc_metrics.stdout_lines | join('\n') }}"
+              description: |-
+                **⚠️ Alerts:**
+                {% set cpu = system_metrics.stdout_lines[0] | regex_search('([0-9.]+)%$') | float %}
+                {% set mem = system_metrics.stdout_lines[1] | regex_search('([0-9.]+)%$') | float %}
+                {% set storage = system_metrics.stdout_lines[2] | regex_search('([0-9]+)%') | int %}
+                {% set network = system_metrics.stdout_lines[3] | float %}
+                {% if cpu > cpu_threshold %}
+                - High CPU usage: {{ cpu }}%
+                {% endif %}
+                {% if mem > memory_threshold %}
+                - High Memory usage: {{ mem }}%
+                {% endif %}
+                {% if storage > storage_threshold %}
+                - High Storage usage: {{ storage }}%
+                {% endif %}
+                {% if network > network_threshold %}
+                - High Network usage: {{ network }} KB/s
+                {% endif %}
+
+    - name: Send Discord notification
+      uri:
+        url: "{{ discord_webhook }}"
+        method: POST
+        body_format: json
+        body: "{{ performance_report }}"
+        status_code: [204, 200]
+      when: discord_webhook | length > 0
+
+    - name: Display performance report (Debug)
+      debug:
+        var: performance_report
