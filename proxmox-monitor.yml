@@ -61,17 +61,23 @@
                 {% set mem = system_metrics.stdout_lines[1] | regex_search('([0-9.]+)%$') | float %}
                 {% set storage = system_metrics.stdout_lines[2] | regex_search('([0-9]+)%') | int %}
                 {% set network = system_metrics.stdout_lines[3] | float %}
+                {% set alerts = [] %}
                 {% if cpu > cpu_threshold %}
-                - High CPU usage: {{ cpu }}%
+                  {% set _ = alerts.append('High CPU usage: ' ~ cpu ~ '%') %}
                 {% endif %}
                 {% if mem > memory_threshold %}
-                - High Memory usage: {{ mem }}%
+                  {% set _ = alerts.append('High Memory usage: ' ~ mem ~ '%') %}
                 {% endif %}
                 {% if storage > storage_threshold %}
-                - High Storage usage: {{ storage }}%
+                  {% set _ = alerts.append('High Storage usage: ' ~ storage ~ '%') %}
                 {% endif %}
                 {% if network > network_threshold %}
-                - High Network usage: {{ network }} KB/s
+                  {% set _ = alerts.append('High Network usage: ' ~ network ~ ' KB/s') %}
+                {% endif %}
+                {% if alerts | length > 0 %}
+                {{ alerts | join('\n') }}
+                {% else %}
+                No alerts at this time.
                 {% endif %}
 
     - name: Send Discord notification
