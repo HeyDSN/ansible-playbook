@@ -54,6 +54,43 @@
         done
       register: lxc_metrics
 
+    - name: Generate alerts
+      set_fact:
+        alerts: |
+          {% set alert_list = [] %}
+          {% set cpu = system_metrics.stdout_lines[0] | regex_search('([0-9.]+)%') | first | float %}
+          {% set mem = system_metrics.stdout_lines[1] | regex_search('([0-9.]+)%') | first | float %}
+          {% set storage = system_metrics.stdout_lines[2] | regex_search('([0-9]+)%') | first | int %}
+          {% if cpu > cpu_threshold %}
+            {% set _ = alert_list.append('🔴 High System CPU: ' ~ cpu | round(2) ~ '%') %}
+          {% endif %}
+          {% if mem > memory_threshold %}
+            {% set _ = alert_list.append('🟠 High System Memory: ' ~ mem | round(2) ~ '%') %}
+          {% endif %}
+          {% if storage > storage_threshold %}
+            {% set _ = alert_list.append('🟡 High System Storage: ' ~ storage ~ '%') %}
+          {% endif %}
+          {% for line in vm_metrics.stdout_lines + lxc_metrics.stdout_lines %}
+            {% if line.startswith('•') %}
+              {% set parts = line.split(' ') %}
+              {% set name = parts[1] %}
+              {% set id = parts[3] | regex_replace('[()]', '') %}
+              {% set cpu = parts[5] | regex_replace(',%$', '') | float %}
+              {% set mem = parts[7] | regex_replace('%$', '') | float %}
+              {% if cpu > cpu_threshold %}
+                {% set _ = alert_list.append('🔴 High CPU: ' ~ name ~ ' ' ~ id ~ ' (' ~ cpu | round(2) ~ '%)') %}
+              {% endif %}
+              {% if mem > memory_threshold %}
+                {% set _ = alert_list.append('🟠 High Mem: ' ~ name ~ ' ' ~ id ~ ' (' ~ mem | round(2) ~ '%)') %}
+              {% endif %}
+            {% endif %}
+          {% endfor %}
+          {% if alert_list | length > 0 %}
+          {{ alert_list | sort | join('\n') }}
+          {% else %}
+          ✅ No alerts at this time.
+          {% endif %}
+
     - name: Generate performance report
       set_fact:
         performance_report:
@@ -68,40 +105,7 @@
                 - name: "📦 LXC Containers"
                   value: "{{ lxc_metrics.stdout_lines | select('match', '^•.*') | join('\n') }}"
                 - name: "⚠️ Alerts"
-                  value: |
-                    {% set cpu = system_metrics.stdout_lines[0] | regex_search('([0-9.]+)%') | first | float %}
-                    {% set mem = system_metrics.stdout_lines[1] | regex_search('([0-9.]+)%') | first | float %}
-                    {% set storage = system_metrics.stdout_lines[2] | regex_search('([0-9]+)%') | first | int %}
-                    {% set alerts = [] %}
-                    {% if cpu > cpu_threshold %}
-                      {% set _ = alerts.append('🔴 High System CPU usage: ' ~ cpu | round(2) ~ '%') %}
-                    {% endif %}
-                    {% if mem > memory_threshold %}
-                      {% set _ = alerts.append('🟠 High System Memory usage: ' ~ mem | round(2) ~ '%') %}
-                    {% endif %}
-                    {% if storage > storage_threshold %}
-                      {% set _ = alerts.append('🟡 High System Storage usage: ' ~ storage ~ '%') %}
-                    {% endif %}
-                    {% for line in vm_metrics.stdout_lines + lxc_metrics.stdout_lines %}
-                      {% if line.startswith('•') %}
-                        {% set parts = line.split(' ') %}
-                        {% set name = parts[1] %}
-                        {% set id = parts[3] | regex_replace('[()]', '') %}
-                        {% set cpu = parts[5] | regex_replace(',%$', '') | float %}
-                        {% set mem = parts[7] | regex_replace('%$', '') | float %}
-                        {% if cpu > cpu_threshold %}
-                          {% set _ = alerts.append('🔴 High CPU usage: ' ~ name ~ ' ' ~ id ~ ' (' ~ cpu | round(2) ~ '%)') %}
-                        {% endif %}
-                        {% if mem > memory_threshold %}
-                          {% set _ = alerts.append('🟠 High Memory usage: ' ~ name ~ ' ' ~ id ~ ' (' ~ mem | round(2) ~ '%)') %}
-                        {% endif %}
-                      {% endif %}
-                    {% endfor %}
-                    {% if alerts | length > 0 %}
-                    {{ alerts | sort | join('\n') }}
-                    {% else %}
-                    ✅ No alerts at this time.
-                    {% endif %}
+                  value: "{{ alerts | trim }}"
               footer:
                 text: "Report generated on {{ ansible_date_time.iso8601 }}"
 
