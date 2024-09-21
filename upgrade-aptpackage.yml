@@ -56,9 +56,9 @@
         path: /var/run/reboot-required
       register: reboot_required_file
 
-    - name: Get disk space saved
+    - name: Get disk space in package cache
       shell: du -sh /var/cache/apt/archives
-      register: disk_space_saved
+      register: disk_space_cache
       changed_when: false
 
     - name: Set notification flag
@@ -81,8 +81,8 @@
                 - name: "🗑️ Removed Packages"
                   value: "{{ autoremovable_packages | length }}"
                   inline: true
-                - name: "💾 Disk Space in Cache"
-                  value: "{{ disk_space_saved.stdout.split()[0] }}"
+                - name: "💾 Disk Space in Package Cache"
+                  value: "{{ disk_space_cache.stdout.split()[0] }}"
                   inline: true
               description: |-
                 {% if reboot_required_file.stat.exists %}
