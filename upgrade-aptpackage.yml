@@ -31,6 +31,21 @@
       register: apt_upgrade_result
       when: upgradable_packages | length > 0
 
+    - name: Perform apt autoremove (dry-run)
+      command: apt-get --dry-run autoremove
+      register: autoremove_dry_run
+      changed_when: false
+
+    - name: Parse autoremovable packages
+      set_fact:
+        autoremovable_packages: "{{ autoremove_dry_run.stdout_lines | select('match', '^Remv.*') | list }}"
+
+    - name: Perform apt autoremove
+      apt:
+        autoremove: yes
+      register: apt_autoremove_result
+      when: autoremovable_packages | length > 0
+
     - name: Check if reboot is required
       stat:
         path: /var/run/reboot-required
@@ -38,7 +53,7 @@
 
     - name: Set notification flag
       set_fact:
-        should_notify: "{{ (upgradable_packages | length > 0) or reboot_required_file.stat.exists }}"
+        should_notify: "{{ (upgradable_packages | length > 0) or (autoremovable_packages | length > 0) or reboot_required_file.stat.exists }}"
 
     - name: Prepare Discord notification message
       set_fact:
@@ -52,6 +67,9 @@
                   inline: true
                 - name: "📦 Upgraded Packages"
                   value: "{{ upgradable_packages | length }}"
+                  inline: true
+                - name: "🗑️ Removed Packages"
+                  value: "{{ autoremovable_packages | length }}"
                   inline: true
               description: |-
                 {% if reboot_required_file.stat.exists %}
@@ -68,6 +86,17 @@
                 ```
                 {% else %}
                 **📋 No packages were upgraded in this run.**
+                {% endif %}
+
+                {% if autoremovable_packages | length > 0 %}
+                **🗑️ Autoremoved Packages:**
+                ```
+                {% for package in autoremovable_packages %}
+                • {{ package | regex_replace('^Remv\\s+(\\S+).*$', '\\1') }}
+                {% endfor %}
+                ```
+                {% else %}
+                **🗑️ No packages were autoremoved.**
                 {% endif %}
 
                 {% if held_packages.stdout_lines | length > 0 %}
