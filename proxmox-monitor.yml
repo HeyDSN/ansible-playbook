@@ -58,9 +58,9 @@
       set_fact:
         alerts: |
           {% set alert_list = [] %}
-          {% set cpu = system_metrics.stdout_lines[0] | regex_search('([0-9.]+)%') | first | float %}
-          {% set mem = system_metrics.stdout_lines[1] | regex_search('([0-9.]+)%') | first | float %}
-          {% set storage = system_metrics.stdout_lines[2] | regex_search('([0-9]+)%') | first | int %}
+          {% set cpu = system_metrics.stdout_lines[0] | regex_replace('%$', '') | float %}
+          {% set mem = system_metrics.stdout_lines[1] | regex_replace('%$', '') | float %}
+          {% set storage = system_metrics.stdout_lines[2] | regex_replace('%$', '') | float %}
           {% if cpu > cpu_threshold %}
             {% set _ = alert_list.append('🔴 High System CPU: ' ~ cpu | round(2) ~ '%') %}
           {% endif %}
