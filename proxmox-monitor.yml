@@ -92,15 +92,15 @@
                     {% set cpu = parts[5] | regex_replace(',%$', '') | float %}
                     {% set mem = parts[7] | regex_replace('%$', '') | float %}
                     {% if cpu > cpu_threshold %}
-                      {% set _ = alerts.append('🔴 High CPU usage for ' ~ name ~ ' ' ~ id ~ ': ' ~ cpu ~ '%') %}
+                      {% set _ = alerts.append('🔴 High CPU usage: ' ~ name ~ ' ' ~ id ~ ' (' ~ cpu | round(2) ~ '%)') %}
                     {% endif %}
                     {% if mem > memory_threshold %}
-                      {% set _ = alerts.append('🟠 High Memory usage for ' ~ name ~ ' ' ~ id ~ ': ' ~ mem ~ '%') %}
+                      {% set _ = alerts.append('🟠 High Memory usage: ' ~ name ~ ' ' ~ id ~ ' (' ~ mem | round(2) ~ '%)') %}
                     {% endif %}
                   {% endif %}
                 {% endfor %}
                 {% if alerts | length > 0 %}
-                {{ alerts | join('\n') }}
+                {{ alerts | sort | join('\n') }}
                 {% else %}
                 ✅ No alerts at this time.
                 {% endif %}
