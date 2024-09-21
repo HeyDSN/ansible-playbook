@@ -53,6 +53,7 @@
                 ```
                 {% for package in upgradable_packages %}
                 {{ package }}
+                
                 {% endfor %}
                 ```
                 
@@ -61,6 +62,7 @@
                 ```
                 {% for package in held_packages.stdout_lines %}
                 {{ package }}
+                
                 {% endfor %}
                 ```
                 {% else %}
