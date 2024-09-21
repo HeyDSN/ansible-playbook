@@ -18,61 +18,41 @@
         echo "Storage Usage: $(df -h / | awk '/\// {print $5}')"
       register: system_metrics
 
-    - name: Collect VM and LXC metrics
+    - name: Collect VM metrics
       shell: |
-        echo "Virtual Machines and LXC Containers:"
-        qm list | tail -n +2 | while read instance; do
-          id=$(echo $instance | awk '{print $1}')
-          name=$(echo $instance | awk '{print $2}')
-          status=$(echo $instance | awk '{print $3}')
+        echo "Virtual Machines:"
+        qm list | tail -n +2 | while read vm; do
+          vmid=$(echo $vm | awk '{print $1}')
+          name=$(echo $vm | awk '{print $2}')
+          status=$(echo $vm | awk '{print $3}')
           if [ "$status" = "running" ]; then
-            if [ -f "/var/run/qemu-server/${id}.pid" ]; then
-              pid=$(cat "/var/run/qemu-server/${id}.pid")
-              stats=$(top -b -n1 -p $pid | tail -n 1)
-              cpu=$(echo $stats | awk '{print $9}')
-              mem=$(echo $stats | awk '{print $10}')
+            if [ -f "/var/run/qemu-server/${vmid}.pid" ]; then
+              pid=$(cat "/var/run/qemu-server/${vmid}.pid")
+              vm_stats=$(top -b -n1 -p $pid | tail -n 1)
+              cpu=$(echo $vm_stats | awk '{print $9}')
+              mem=$(echo $vm_stats | awk '{print $10}')
+              printf "• %s (ID: %s) CPU: %.1f%%, Mem: %.1f%%\n" "$name" "$vmid" $cpu $mem
             else
-              stats=$(pct exec $id -- top -bn1)
-              cpu=$(echo "$stats" | grep "Cpu(s)" | sed "s/.*, *\([0-9.]*\)%* id.*/\1/" | awk '{print 100 - $1}')
-              mem=$(echo "$stats" | grep "Mem:" | awk '{print $3/$2 * 100.0}')
+              echo "• $name (ID: $vmid) - PID file not found"
             fi
-            printf "• %s (ID: %s) CPU: %.1f%%, Mem: %.1f%%\n" "$name" "$id" $cpu $mem
           fi
         done
-      register: instance_metrics
+      register: vm_metrics
 
-    - name: Calculate alerts
-      set_fact:
-        alerts: |
-          {% set alert_list = [] %}
-          {% set cpu = system_metrics.stdout_lines[0] | regex_search('([0-9.]+)%') | first | float %}
-          {% set mem = system_metrics.stdout_lines[1] | regex_search('([0-9.]+)%') | first | float %}
-          {% set storage = system_metrics.stdout_lines[2] | regex_search('([0-9]+)%') | first | int %}
-          {% if cpu > cpu_threshold %}
-            {% set _ = alert_list.append('🔴 High System CPU: ' ~ cpu | round(2) ~ '%') %}
-          {% endif %}
-          {% if mem > memory_threshold %}
-            {% set _ = alert_list.append('🟠 High System Memory: ' ~ mem | round(2) ~ '%') %}
-          {% endif %}
-          {% if storage > storage_threshold %}
-            {% set _ = alert_list.append('🟡 High System Storage: ' ~ storage ~ '%') %}
-          {% endif %}
-          {% for line in instance_metrics.stdout_lines %}
-            {% if line.startswith('•') %}
-              {% set parts = line.split(' ') %}
-              {% set name = parts[1] %}
-              {% set id = parts[3] | regex_replace('[()]', '') %}
-              {% set cpu = parts[5] | regex_replace('%$', '') | float %}
-              {% set mem = parts[7] | regex_replace('%$', '') | float %}
-              {% if cpu > cpu_threshold %}
-                {% set _ = alert_list.append('🔴 High CPU: ' ~ name ~ ' ' ~ id ~ ' (' ~ cpu | round(2) ~ '%)') %}
-              {% endif %}
-              {% if mem > memory_threshold %}
-                {% set _ = alert_list.append('🟠 High Mem: ' ~ name ~ ' ' ~ id ~ ' (' ~ mem | round(2) ~ '%)') %}
-              {% endif %}
-            {% endif %}
-          {% endfor %}
-          {{ alert_list | sort | join('\n') }}
+    - name: Collect LXC metrics
+      shell: |
+        echo "LXC Containers:"
+        pct list | tail -n +2 | while read ct; do
+          ctid=$(echo $ct | awk '{print $1}')
+          name=$(echo $ct | awk '{print $3}')
+          status=$(echo $ct | awk '{print $2}')
+          if [ "$status" = "running" ]; then
+            cpu=$(pct exec $ctid -- top -bn1 | grep "Cpu(s)" | sed "s/.*, *\([0-9.]*\)%* id.*/\1/" | awk '{print 100 - $1}')
+            mem=$(pct exec $ctid -- free | grep Mem | awk '{print $3/$2 * 100.0}')
+            printf "• %s (ID: %s) CPU: %.1f%%, Mem: %.1f%%\n" "$name" "$ctid" $cpu $mem
+          fi
+        done
+      register: lxc_metrics
 
     - name: Generate performance report
       set_fact:
@@ -83,10 +63,45 @@
               fields:
                 - name: "🖥️ System Metrics"
                   value: "{{ system_metrics.stdout }}"
-                - name: "💻 Virtual Machines and LXC Containers"
-                  value: "{{ instance_metrics.stdout_lines | select('match', '^•.*') | join('\n') }}"
+                - name: "💻 Virtual Machines"
+                  value: "{{ vm_metrics.stdout_lines | select('match', '^•.*') | join('\n') }}"
+                - name: "📦 LXC Containers"
+                  value: "{{ lxc_metrics.stdout_lines | select('match', '^•.*') | join('\n') }}"
                 - name: "⚠️ Alerts"
-                  value: "{{ alerts if alerts | trim != '' else '✅ No alerts at this time.' }}"
+                  value: |
+                    {% set cpu = system_metrics.stdout_lines[0] | regex_search('([0-9.]+)%') | first | float %}
+                    {% set mem = system_metrics.stdout_lines[1] | regex_search('([0-9.]+)%') | first | float %}
+                    {% set storage = system_metrics.stdout_lines[2] | regex_search('([0-9]+)%') | first | int %}
+                    {% set alerts = [] %}
+                    {% if cpu > cpu_threshold %}
+                      {% set _ = alerts.append('🔴 High System CPU usage: ' ~ cpu | round(2) ~ '%') %}
+                    {% endif %}
+                    {% if mem > memory_threshold %}
+                      {% set _ = alerts.append('🟠 High System Memory usage: ' ~ mem | round(2) ~ '%') %}
+                    {% endif %}
+                    {% if storage > storage_threshold %}
+                      {% set _ = alerts.append('🟡 High System Storage usage: ' ~ storage ~ '%') %}
+                    {% endif %}
+                    {% for line in vm_metrics.stdout_lines + lxc_metrics.stdout_lines %}
+                      {% if line.startswith('•') %}
+                        {% set parts = line.split(' ') %}
+                        {% set name = parts[1] %}
+                        {% set id = parts[3] | regex_replace('[()]', '') %}
+                        {% set cpu = parts[5] | regex_replace(',%$', '') | float %}
+                        {% set mem = parts[7] | regex_replace('%$', '') | float %}
+                        {% if cpu > cpu_threshold %}
+                          {% set _ = alerts.append('🔴 High CPU usage: ' ~ name ~ ' ' ~ id ~ ' (' ~ cpu | round(2) ~ '%)') %}
+                        {% endif %}
+                        {% if mem > memory_threshold %}
+                          {% set _ = alerts.append('🟠 High Memory usage: ' ~ name ~ ' ' ~ id ~ ' (' ~ mem | round(2) ~ '%)') %}
+                        {% endif %}
+                      {% endif %}
+                    {% endfor %}
+                    {% if alerts | length > 0 %}
+                    {{ alerts | sort | join('\n') }}
+                    {% else %}
+                    ✅ No alerts at this time.
+                    {% endif %}
               footer:
                 text: "Report generated on {{ ansible_date_time.iso8601 }}"
 
