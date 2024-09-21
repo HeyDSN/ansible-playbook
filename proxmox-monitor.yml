@@ -31,7 +31,7 @@
               vm_stats=$(top -b -n1 -p $pid | tail -n 1)
               cpu=$(echo $vm_stats | awk '{print $9}')
               mem=$(echo $vm_stats | awk '{print $10}')
-              printf "• %s (ID: %s) CPU: %.1f%%, Mem: %.1f%%\n" "$name" "$vmid" $cpu $mem
+              printf "• %s (ID: %s)\nCPU: %.1f%%\nMem: %.1f%%\n\n" "$name" "$vmid" $cpu $mem
             else
               echo "• $name (ID: $vmid) - PID file not found"
             fi
@@ -45,7 +45,7 @@
           if [ "$status" = "running" ]; then
             cpu=$(pct exec $ctid -- top -bn1 | grep "Cpu(s)" | sed "s/.*, *\([0-9.]*\)%* id.*/\1/" | awk '{print 100 - $1}')
             mem=$(pct exec $ctid -- free | grep Mem | awk '{print $3/$2 * 100.0}')
-            printf "• %s (ID: %s) CPU: %.1f%%, Mem: %.1f%%\n" "$name" "$ctid" $cpu $mem
+            printf "• %s (ID: %s)\nCPU: %.1f%%\nMem: %.1f%%\n\n" "$name" "$ctid" $cpu $mem
           fi
         done
       register: vm_lxc_metrics
