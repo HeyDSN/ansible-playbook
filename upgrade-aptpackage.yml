@@ -1,0 +1,85 @@
+---
+- hosts: all
+  gather_facts: yes
+  become: yes
+  vars:
+    ansible_ssh_args: '-o ControlMaster=no -o ControlPersist=no'
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+      register: apt_update_result
+
+    - name: Get upgradable packages (dry-run)
+      command: apt-get -s upgrade
+      register: upgrade_dry_run
+      changed_when: false
+
+    - name: Parse upgradable packages
+      set_fact:
+        upgradable_packages: "{{ upgrade_dry_run.stdout_lines | select('match', '^Inst.*') | list }}"
+
+    - name: Get list of held packages
+      shell: apt-mark showhold
+      register: held_packages
+      changed_when: false
+
+    - name: Perform apt upgrade
+      apt:
+        upgrade: yes
+      register: apt_upgrade_result
+
+    - name: Check if reboot is required
+      stat:
+        path: /var/run/reboot-required
+      register: reboot_required_file
+
+    - name: Prepare Discord notification message
+      set_fact:
+        discord_message:
+          embeds:
+            - title: "Apt Upgrade Report for {{ inventory_hostname }}"
+              color: 3066993  # Green color
+              fields:
+                - name: "Host"
+                  value: "{{ inventory_hostname }}"
+                  inline: true
+                - name: "Reboot Required"
+                  value: "{{ 'Yes' if reboot_required_file.stat.exists else 'No' }}"
+                  inline: true
+              description: |-
+                **Upgraded Packages:**
+                ```
+                {% for package in upgradable_packages %}
+                {{ package }}
+                {% endfor %}
+                ```
+                
+                {% if held_packages.stdout_lines | length > 0 %}
+                **Held Packages:**
+                ```
+                {% for package in held_packages.stdout_lines %}
+                {{ package }}
+                {% endfor %}
+                ```
+                {% else %}
+                No packages are being held back.
+                {% endif %}
+                
+                {% if reboot_required_file.stat.exists %}
+                **⚠️ A system restart is required to complete the upgrade process.**
+                {% endif %}
+
+    - name: Send Discord notification
+      uri:
+        url: "{{ lookup('env', 'DISCORD_WEBHOOK_URL') }}"
+        method: POST
+        body_format: json
+        body: "{{ discord_message }}"
+        status_code: [204, 200]  # Accept both 204 and 200 as success
+      when: lookup('env', 'DISCORD_WEBHOOK_URL') | length > 0
+
+    - name: Display upgrade report (Debug)
+      debug:
+        var: discord_message
