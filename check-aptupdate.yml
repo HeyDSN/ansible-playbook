@@ -5,6 +5,8 @@
   vars:
     ansible_ssh_args: '-o ControlMaster=no -o ControlPersist=no'
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+    update_required_webhook: "{{ lookup('env', 'ADW_UPDATE') }}"
+    no_update_webhook: "{{ lookup('env', 'ADW_NOTIF') }}"
   tasks:
     - name: Check for updates
       apt:
@@ -49,7 +51,6 @@
                 ```
                 {% for package in upgradable_packages.stdout_lines %}
                 • {{ package | regex_replace('^(\\S+).*$', '\\1') }}
-                
                 {% endfor %}
                 ```
                 {% else %}
@@ -66,15 +67,28 @@
                 **🔓 No packages are being held back.**
                 {% endif %}
 
-    - name: Send Discord notification
+    - name: Send Discord notification for updates required
       uri:
-        url: "{{ lookup('env', 'DISCORD_WEBHOOK_URL') }}"
+        url: "{{ update_required_webhook }}"
         method: POST
         body_format: json
         body: "{{ discord_message }}"
         status_code: [204, 200]  # Accept both 204 and 200 as success
-      when: lookup('env', 'DISCORD_WEBHOOK_URL') | length > 0
+      when: 
+        - update_count|int > 0
+        - update_required_webhook | length > 0
 
-    - name: Notify if updates are available (Debug)
+    - name: Send Discord notification for no updates required
+      uri:
+        url: "{{ no_update_webhook }}"
+        method: POST
+        body_format: json
+        body: "{{ discord_message }}"
+        status_code: [204, 200]  # Accept both 204 and 200 as success
+      when: 
+        - update_count|int == 0
+        - no_update_webhook | length > 0
+
+    - name: Display update check report (Debug)
       debug:
         var: discord_message
