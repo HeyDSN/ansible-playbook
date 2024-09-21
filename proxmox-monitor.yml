@@ -76,14 +76,29 @@
                 {% set storage = system_metrics.stdout_lines[2] | regex_search('([0-9]+)%') | int %}
                 {% set alerts = [] %}
                 {% if cpu > cpu_threshold %}
-                  {% set _ = alerts.append('🔴 High CPU usage: ' ~ cpu | round(2) ~ '%') %}
+                  {% set _ = alerts.append('🔴 High System CPU usage: ' ~ cpu | round(2) ~ '%') %}
                 {% endif %}
                 {% if mem > memory_threshold %}
-                  {% set _ = alerts.append('🟠 High Memory usage: ' ~ mem | round(2) ~ '%') %}
+                  {% set _ = alerts.append('🟠 High System Memory usage: ' ~ mem | round(2) ~ '%') %}
                 {% endif %}
                 {% if storage > storage_threshold %}
-                  {% set _ = alerts.append('🟡 High Storage usage: ' ~ storage ~ '%') %}
+                  {% set _ = alerts.append('🟡 High System Storage usage: ' ~ storage ~ '%') %}
                 {% endif %}
+                {% for line in vm_metrics.stdout_lines + lxc_metrics.stdout_lines %}
+                  {% if line.startswith('•') %}
+                    {% set parts = line.split(' ') %}
+                    {% set name = parts[1] %}
+                    {% set id = parts[2] | regex_replace('[()]', '') %}
+                    {% set cpu = parts[4] | regex_replace(',$', '') | float %}
+                    {% set mem = parts[6] | regex_replace('%$', '') | float %}
+                    {% if cpu > cpu_threshold %}
+                      {% set _ = alerts.append('🔴 High CPU usage for ' ~ name ~ ' ' ~ id ~ ': ' ~ cpu ~ '%') %}
+                    {% endif %}
+                    {% if mem > memory_threshold %}
+                      {% set _ = alerts.append('🟠 High Memory usage for ' ~ name ~ ' ' ~ id ~ ': ' ~ mem ~ '%') %}
+                    {% endif %}
+                  {% endif %}
+                {% endfor %}
                 {% if alerts | length > 0 %}
                 {{ alerts | join('\n') }}
                 {% else %}
