@@ -1,0 +1,106 @@
+---
+- hosts: nginx_proxy:gitlab
+  gather_facts: yes
+  become: yes
+  vars:
+    ansible_ssh_args: '-o ControlMaster=no -o ControlPersist=no'
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+    cloudflared_deb_url: "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb"
+    temp_deb_path: "/tmp/cloudflared.deb"
+
+  pre_tasks:
+    - name: Include pre-requisite tasks
+      include_tasks: _prereq_tasks.yml
+
+  tasks:
+    - name: Check if Cloudflared is installed
+      command: which cloudflared
+      register: cloudflared_check
+      ignore_errors: yes
+      changed_when: false
+
+    - name: Get installed Cloudflared version
+      command: cloudflared --version
+      register: installed_version
+      changed_when: false
+      failed_when: false
+      when: cloudflared_check.rc == 0
+
+    - name: Get latest Cloudflared version
+      uri:
+        url: "https://api.github.com/repos/cloudflare/cloudflared/releases/latest"
+        return_content: yes
+      register: latest_release
+      when: cloudflared_check.rc == 0
+
+    - name: Set latest version fact
+      set_fact:
+        latest_version: "{{ latest_release.json.tag_name }}"
+      when: cloudflared_check.rc == 0
+
+    - name: Compare versions
+      set_fact:
+        update_needed: "{{ installed_version.stdout is not defined or installed_version.stdout.split()[1] != latest_version }}"
+      when: cloudflared_check.rc == 0
+
+    - name: Download latest Cloudflared deb package
+      command: "curl -L --output {{ temp_deb_path }} {{ cloudflared_deb_url }}"
+      when: cloudflared_check.rc == 0 and update_needed
+
+    - name: Install Cloudflared deb package
+      apt:
+        deb: "{{ temp_deb_path }}"
+      when: cloudflared_check.rc == 0 and update_needed
+      register: cloudflared_updated
+
+    - name: Restart Cloudflared service
+      systemd:
+        name: cloudflared.service
+        state: restarted
+      when: cloudflared_updated.changed
+
+    - name: Clean up temporary deb file
+      file:
+        path: "{{ temp_deb_path }}"
+        state: absent
+      when: cloudflared_check.rc == 0 and update_needed
+
+    - name: Prepare Discord notification message
+      set_fact:
+        discord_message:
+          embeds:
+            - title: "🔄 Cloudflared Update Report for {{ inventory_hostname }}"
+              color: 3066993
+              fields:
+                - name: "🖥️ Host"
+                  value: "{{ inventory_hostname }}"
+                  inline: true
+                - name: "📦 Cloudflared Status"
+                  value: "Updated"
+                  inline: true
+                - name: "🔢 Version"
+                  value: "{{ latest_version }}"
+                  inline: true
+              description: |-
+                Cloudflared has been updated to the latest version.
+                - Old version: {{ installed_version.stdout.split()[1] }}
+                - New version: {{ latest_version }}
+              footer:
+                text: "Report generated on {{ ansible_date_time.iso8601 }}"
+      when: cloudflared_updated.changed
+
+    - name: Send Discord notification
+      uri:
+        url: "{{ lookup('env', 'ADW_UPDATE') }}"
+        method: POST
+        body_format: json
+        body: "{{ discord_message }}"
+        status_code: [204, 200]  # Accept both 204 and 200 as success
+      when: 
+        - lookup('env', 'ADW_UPDATE') | length > 0
+        - cloudflared_updated.changed
+
+    - name: Display update report (Debug)
+      debug:
+        msg: "Cloudflared on {{ inventory_hostname }} has been updated to version {{ latest_version }}"
+      when: cloudflared_updated.changed
