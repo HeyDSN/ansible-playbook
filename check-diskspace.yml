@@ -74,6 +74,8 @@
                 {% endfor %}
                 
                 Please check and free up space if necessary.
+              footer:
+                text: "Report generated on {{ ansible_date_time.iso8601 }}"
       when: disks_over_threshold | length > 0
 
     - name: Send Discord notification

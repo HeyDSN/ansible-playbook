@@ -85,6 +85,8 @@
                 - Review and adjust resource limits for better overall utilization.
                 - Consider consolidating workloads if many VMs/LXCs are underutilized.
                 - Monitor trends over time to make informed decisions about resource allocation.
+              footer:
+                text: "Report generated on {{ ansible_date_time.iso8601 }}"
 
     - name: Send Discord notification
       uri:

@@ -92,6 +92,8 @@
                 {% if not updates_available and not held_updates_available %}
                 **✅ System is up to date!**
                 {% endif %}
+              footer:
+                text: "Report generated on {{ ansible_date_time.iso8601 }}"
 
     - name: Send Discord notification for updates available
       uri:
