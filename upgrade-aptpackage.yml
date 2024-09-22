@@ -3,6 +3,7 @@
   gather_facts: no
   become: yes
   vars:
+    ansible_remote_tmp: /tmp
     ansible_ssh_args: '-o ControlMaster=no -o ControlPersist=no'
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
     proxmox_host: "{{ lookup('env', 'PROXMOX_HOST') }}"
@@ -190,6 +191,7 @@
             headers:
               Authorization: "{{ proxmox_api_token }}"
           delegate_to: localhost
+          become: no
 
         - name: Send power off notification
           uri:
@@ -211,6 +213,7 @@
                   footer:
                     text: "Powered off at {{ ansible_date_time.iso8601 }}"
           delegate_to: localhost
+          become: no
       when: 
         - original_resource_state is defined
         - original_resource_state == 'stopped'

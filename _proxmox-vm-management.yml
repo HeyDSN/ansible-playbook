@@ -12,6 +12,7 @@
       Authorization: "{{ proxmox_api_token }}"
   register: resource_state
   delegate_to: localhost
+  become: no
 
 - name: Power on resource if it's off
   block:
@@ -23,6 +24,7 @@
         headers:
           Authorization: "{{ proxmox_api_token }}"
       delegate_to: localhost
+      become: no
 
     - name: Send power on notification
       uri:
@@ -44,6 +46,7 @@
               footer:
                 text: "Powered on at {{ ansible_date_time.iso8601 }}"
       delegate_to: localhost
+      become: no
   when: 
     - resource_state.json.data.status == 'stopped'
     - lookup('env', 'ADW_PROXMOX') | length > 0
@@ -56,6 +59,7 @@
     timeout: 300
   when: resource_state.json.data.status == 'stopped'
   delegate_to: localhost
+  become: no
 
 - name: Set fact for original resource state
   set_fact:

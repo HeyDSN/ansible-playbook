@@ -19,16 +19,17 @@
               value: "{{ inventory_hostname }}"
               inline: true
             - name: "📋 Playbook"
-              value: "{{ ansible_play_name | default(playbook_name, true) }}"
+              value: "{{ playbook_name | default('Unknown') }}"
               inline: true
             - name: "🔧 Task"
               value: "{{ task_name | default('Host connectivity check') }}"
               inline: true
           description: |-
-            The host is currently unreachable during the execution of the {{ ansible_play_name | default(playbook_name, true) }} playbook.
+            The host is currently unreachable during the execution of the {{ playbook_name | default('current') }} playbook.
             The playbook execution will be skipped for this host but will continue for other reachable hosts.
           footer:
             text: "Notification sent on {{ lookup('pipe', 'date -u +\"%Y-%m-%dT%H:%M:%SZ\"') }}"
+    status_code: [204, 200]  # Accept both 204 and 200 as success
   delegate_to: localhost
   become: no
   when: 

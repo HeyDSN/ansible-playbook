@@ -9,6 +9,7 @@
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
     update_required_webhook: "{{ lookup('env', 'ADW_UPDATE') }}"
     update_held_webhook: "{{ lookup('env', 'ADW_NOTIF') }}"
+    playbook_name: "{{ ansible_play_name }}"
 
   pre_tasks:
     - name: Check host connectivity

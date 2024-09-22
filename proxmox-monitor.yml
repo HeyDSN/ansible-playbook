@@ -1,8 +1,10 @@
 ---
 - name: Proxmox Performance Monitoring
-  hosts: proxmox_node
-  become: true
+  hosts: all
+  gather_facts: yes
+  become: yes
   vars:
+    ansible_remote_tmp: /tmp
     ansible_ssh_args: '-o ControlMaster=no -o ControlPersist=no'
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
     discord_webhook: "{{ lookup('env', 'ADW_PROXMOX') }}"
@@ -13,13 +15,6 @@
     guest_memory_threshold: 80
 
   pre_tasks:
-    - name: Check host connectivity
-      include_tasks: 
-        file: _host-connectivity-check.yml
-        apply:
-          vars:
-            task_name: "Pre-check for Proxmox Performance Monitoring"
-
     - name: Include pre-requisite tasks
       include_tasks: _prereq_tasks.yml
 

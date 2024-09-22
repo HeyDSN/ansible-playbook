@@ -1,11 +1,14 @@
 ---
 - hosts: all
-  gather_facts: yes
+  gather_facts: no
   become: yes
+  ignore_unreachable: yes
   vars:
+    ansible_remote_tmp: /tmp
     ansible_ssh_args: '-o ControlMaster=no -o ControlPersist=no'
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
     threshold_percent: 80
+    playbook_name: "{{ ansible_play_name }}"
 
   pre_tasks:
     - name: Check host connectivity
@@ -14,6 +17,10 @@
         apply:
           vars:
             task_name: "Pre-check for Check Disk Space"
+
+    - name: Gather facts
+      setup:
+      when: not host_is_unreachable | default(false)
 
     - name: Include pre-requisite tasks
       include_tasks: _prereq_tasks.yml
@@ -99,3 +106,8 @@
     - name: Debug disk usage (always show)
       ansible.builtin.debug:
         var: disks_over_threshold
+
+  post_tasks:
+    - name: Ensure playbook completes successfully
+      debug:
+        msg: "Playbook completed successfully. Some hosts may have been skipped due to being unreachable."
