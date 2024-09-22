@@ -45,6 +45,7 @@
               description: "The resource was powered on to perform maintenance tasks."
               footer:
                 text: "Powered on at {{ lookup('pipe', 'date -u +\"%Y-%m-%dT%H:%M:%SZ\"') }}"
+        status_code: [204, 200]
       delegate_to: localhost
       become: no
   when: 
@@ -55,8 +56,8 @@
   wait_for:
     host: "{{ ansible_host }}"
     port: 22
-    delay: 10
-    timeout: 300
+    delay: 300
+    timeout: 1200
   when: resource_state.json.data.status == 'stopped'
   delegate_to: localhost
   become: no

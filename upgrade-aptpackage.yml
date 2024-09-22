@@ -212,6 +212,7 @@
                   description: "The resource was powered off after completing maintenance tasks."
                   footer:
                     text: "Powered off at {{ ansible_date_time.iso8601 }}"
+            status_code: [204, 200]
           delegate_to: localhost
           become: no
       when: 
