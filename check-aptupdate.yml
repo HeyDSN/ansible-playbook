@@ -2,7 +2,7 @@
 - hosts: all
   gather_facts: no
   become: yes
-  ignore_unreachable: yes  # Add this line
+  ignore_unreachable: yes
   vars:
     ansible_remote_tmp: /tmp
     ansible_ssh_args: '-o ControlMaster=no -o ControlPersist=no'
