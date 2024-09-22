@@ -28,7 +28,7 @@
             The host is currently unreachable during the execution of the {{ ansible_play_name | default(playbook_name, true) }} playbook.
             The playbook execution will be skipped for this host but will continue for other reachable hosts.
           footer:
-            text: "Notification sent on {{ ansible_date_time.iso8601 }}"
+            text: "Notification sent on {{ lookup('pipe', 'date -u +\"%Y-%m-%dT%H:%M:%SZ\"') }}"
   delegate_to: localhost
   when: 
     - host_reachable is failed
