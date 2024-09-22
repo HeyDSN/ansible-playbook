@@ -26,17 +26,26 @@
         state: present
       when: ansible_os_family == "Debian"
 
-    - name: Install QEMU guest agent if VM
+    - name: Check if running on Proxmox
+      stat:
+        path: /etc/pve
+      register: pve_check
+
+    - name: Install QEMU guest agent if VM and not on Proxmox
       package:
         name: qemu-guest-agent
         state: present
-      when: ansible_virtualization_type == "kvm"
+      when: 
+        - ansible_virtualization_type == "kvm"
+        - not pve_check.stat.exists
 
-    - name: Install LXC if running in container
+    - name: Install LXC if running in container and not on Proxmox
       package:
         name: lxc
         state: present
-      when: ansible_virtualization_type == "lxc"
+      when: 
+        - ansible_virtualization_type == "lxc"
+        - not pve_check.stat.exists
 
   become: yes
   ignore_errors: yes
