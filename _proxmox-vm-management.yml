@@ -1,0 +1,62 @@
+---
+- name: Determine if resource is VM or LXC
+  set_fact:
+    resource_type: "{{ 'qemu' if inventory_hostname in groups['vm'] else 'lxc' }}"
+
+- name: Get Proxmox resource state
+  uri:
+    url: "http://{{ proxmox_host }}:8006/api2/json/nodes/{{ proxmox_node }}/{{ resource_type }}/{{ proxmox_vm_id }}/status/current"
+    method: GET
+    validate_certs: no
+    headers:
+      Authorization: "{{ proxmox_api_token }}"
+  register: resource_state
+  delegate_to: localhost
+
+- name: Power on resource if it's off
+  block:
+    - name: Start Proxmox resource
+      uri:
+        url: "http://{{ proxmox_host }}:8006/api2/json/nodes/{{ proxmox_node }}/{{ resource_type }}/{{ proxmox_vm_id }}/status/start"
+        method: POST
+        validate_certs: no
+        headers:
+          Authorization: "{{ proxmox_api_token }}"
+      delegate_to: localhost
+
+    - name: Send power on notification
+      uri:
+        url: "{{ lookup('env', 'ADW_PROXMOX') }}"
+        method: POST
+        body_format: json
+        body:
+          embeds:
+            - title: "🟢 Proxmox Resource Powered On"
+              color: 3066993
+              fields:
+                - name: "Resource"
+                  value: "{{ inventory_hostname }}"
+                - name: "Type"
+                  value: "{{ 'VM' if resource_type == 'qemu' else 'LXC Container' }}"
+                - name: "ID"
+                  value: "{{ proxmox_vm_id }}"
+              description: "The resource was powered on to perform maintenance tasks."
+              footer:
+                text: "Powered on at {{ ansible_date_time.iso8601 }}"
+      delegate_to: localhost
+  when: 
+    - resource_state.json.data.status == 'stopped'
+    - lookup('env', 'ADW_PROXMOX') | length > 0
+
+- name: Wait for resource to be accessible
+  wait_for:
+    host: "{{ ansible_host }}"
+    port: 22
+    delay: 10
+    timeout: 300
+  when: resource_state.json.data.status == 'stopped'
+  delegate_to: localhost
+
+- name: Set fact for original resource state
+  set_fact:
+    original_resource_state: "{{ resource_state.json.data.status }}"

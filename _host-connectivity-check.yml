@@ -1,0 +1,39 @@
+---
+- name: Check if host is reachable
+  wait_for_connection:
+    timeout: 10
+  ignore_errors: yes
+  register: host_reachable
+
+- name: Send notification for unreachable host
+  uri:
+    url: "{{ lookup('env', 'ADW_PROXMOX') }}"
+    method: POST
+    body_format: json
+    body:
+      embeds:
+        - title: "🔴 Host Unreachable: {{ inventory_hostname }}"
+          color: 15158332  # Red color
+          fields:
+            - name: "🖥️ Host"
+              value: "{{ inventory_hostname }}"
+              inline: true
+            - name: "📋 Playbook"
+              value: "{{ ansible_play_name | default(playbook_name, true) }}"
+              inline: true
+            - name: "🔧 Task"
+              value: "{{ task_name | default('Host connectivity check') }}"
+              inline: true
+          description: |-
+            The host is currently unreachable during the execution of the {{ ansible_play_name | default(playbook_name, true) }} playbook.
+            The playbook execution will be skipped for this host but will continue for other reachable hosts.
+          footer:
+            text: "Notification sent on {{ ansible_date_time.iso8601 }}"
+  delegate_to: localhost
+  when: 
+    - not host_reachable.is_successful
+    - lookup('env', 'ADW_PROXMOX') | length > 0
+
+- name: Skip unreachable host
+  meta: end_host
+  when: not host_reachable.is_successful

@@ -8,6 +8,13 @@
     threshold_percent: 80
 
   pre_tasks:
+    - name: Check host connectivity
+      include_tasks: 
+        file: _host-connectivity-check.yml
+        apply:
+          vars:
+            task_name: "Pre-check for Check Disk Space"
+
     - name: Include pre-requisite tasks
       include_tasks: _prereq_tasks.yml
 

@@ -5,8 +5,18 @@
   vars:
     ansible_ssh_args: '-o ControlMaster=no -o ControlPersist=no'
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+    proxmox_host: "{{ lookup('env', 'PROXMOX_HOST') }}"
+    proxmox_node: "{{ lookup('env', 'PROXMOX_NODE') }}"
+    proxmox_api_token: "{{ lookup('env', 'PROXMOX_API_TOKEN') }}"
 
   pre_tasks:
+    - name: Include Proxmox resource management tasks
+      include_tasks: _proxmox-vm-management.yml
+      when: "'proxmox_vm_id' in hostvars[inventory_hostname]"
+
+    - name: Gather facts
+      setup:
+
     - name: Include pre-requisite tasks
       include_tasks: _prereq_tasks.yml
 
@@ -168,3 +178,41 @@
       debug:
         var: discord_message
       when: should_notify
+
+  post_tasks:
+    - name: Power off resource if it was originally off
+      block:
+        - name: Stop Proxmox resource
+          uri:
+            url: "http://{{ proxmox_host }}:8006/api2/json/nodes/{{ proxmox_node }}/{{ resource_type }}/{{ proxmox_vm_id }}/status/stop"
+            method: POST
+            validate_certs: no
+            headers:
+              Authorization: "{{ proxmox_api_token }}"
+          delegate_to: localhost
+
+        - name: Send power off notification
+          uri:
+            url: "{{ lookup('env', 'ADW_PROXMOX') }}"
+            method: POST
+            body_format: json
+            body:
+              embeds:
+                - title: "🔴 Proxmox Resource Powered Off"
+                  color: 15158332
+                  fields:
+                    - name: "Resource"
+                      value: "{{ inventory_hostname }}"
+                    - name: "Type"
+                      value: "{{ 'VM' if resource_type == 'qemu' else 'LXC Container' }}"
+                    - name: "ID"
+                      value: "{{ proxmox_vm_id }}"
+                  description: "The resource was powered off after completing maintenance tasks."
+                  footer:
+                    text: "Powered off at {{ ansible_date_time.iso8601 }}"
+          delegate_to: localhost
+      when: 
+        - original_resource_state is defined
+        - original_resource_state == 'stopped'
+        - "'proxmox_vm_id' in hostvars[inventory_hostname]"
+        - lookup('env', 'ADW_PROXMOX') | length > 0
