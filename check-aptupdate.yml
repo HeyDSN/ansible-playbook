@@ -23,119 +23,120 @@
 
     - name: Include pre-requisite tasks
       include_tasks: _prereq_tasks.yml
+      when: not host_is_unreachable | default(false)
 
   tasks:
     - name: Run update tasks
       block:
-      - name: Check for updates
-        apt:
-          update_cache: yes
-        register: apt_update_result
+        - name: Check for updates
+          apt:
+            update_cache: yes
+          register: apt_update_result
 
-      - name: Get list of manually held packages
-        shell: apt-mark showhold
-        register: manually_held_packages
-        changed_when: false
+        - name: Get list of manually held packages
+          shell: apt-mark showhold
+          register: manually_held_packages
+          changed_when: false
 
-      - name: Get list of all upgradable packages
-        shell: apt list --upgradable 2>/dev/null | grep -v '^Listing...' | cut -d'/' -f1
-        register: all_upgradable_packages
-        changed_when: false
+        - name: Get list of all upgradable packages
+          shell: apt list --upgradable 2>/dev/null | grep -v '^Listing...' | cut -d'/' -f1
+          register: all_upgradable_packages
+          changed_when: false
 
-      - name: Get list of packages that would be upgraded
-        shell: apt-get --simulate dist-upgrade | grep '^Inst' | awk '{print $2}'
-        register: would_be_upgraded
-        changed_when: false
+        - name: Get list of packages that would be upgraded
+          shell: apt-get --simulate dist-upgrade | grep '^Inst' | awk '{print $2}'
+          register: would_be_upgraded
+          changed_when: false
 
-      - name: Identify system-held packages
-        set_fact:
-          system_held_packages: "{{ all_upgradable_packages.stdout_lines | difference(would_be_upgraded.stdout_lines) | difference(manually_held_packages.stdout_lines) }}"
+        - name: Identify system-held packages
+          set_fact:
+            system_held_packages: "{{ all_upgradable_packages.stdout_lines | difference(would_be_upgraded.stdout_lines) | difference(manually_held_packages.stdout_lines) }}"
 
-      - name: Get details of upgradable packages
-        shell: |
-          apt list --upgradable 2>/dev/null | grep -v '^Listing...' | while read line; do
-            pkg=$(echo $line | cut -d'/' -f1)
-            if echo "{{ would_be_upgraded.stdout_lines | join(' ') }}" | grep -q "$pkg"; then
-              echo "$line"
-            fi
-          done
-        register: upgradable_packages_details
-        changed_when: false
+        - name: Get details of upgradable packages
+          shell: |
+            apt list --upgradable 2>/dev/null | grep -v '^Listing...' | while read line; do
+              pkg=$(echo $line | cut -d'/' -f1)
+              if echo "{{ would_be_upgraded.stdout_lines | join(' ') }}" | grep -q "$pkg"; then
+                echo "$line"
+              fi
+            done
+          register: upgradable_packages_details
+          changed_when: false
 
-      - name: Set update flags
-        set_fact:
-          updates_available: "{{ would_be_upgraded.stdout_lines | length > 0 }}"
-          held_updates_available: "{{ manually_held_packages.stdout_lines | length > 0 or system_held_packages | length > 0 }}"
+        - name: Set update flags
+          set_fact:
+            updates_available: "{{ would_be_upgraded.stdout_lines | length > 0 }}"
+            held_updates_available: "{{ manually_held_packages.stdout_lines | length > 0 or system_held_packages | length > 0 }}"
 
-      - name: Prepare Discord notification message
-        set_fact:
-          discord_message:
-            embeds:
-              - title: "🔄 Update Check for {{ inventory_hostname }}"
-                color: "{{ '15158332' if updates_available else '3066993' }}"  # Red if updates available, Green if only held updates
-                fields:
-                  - name: "🖥️ Host"
-                    value: "{{ inventory_hostname }}"
-                    inline: true
-                  - name: "📦 Updates Available"
-                    value: "{{ would_be_upgraded.stdout_lines | length }}"
-                    inline: true
-                  - name: "🔒 Held Updates"
-                    value: "{{ (manually_held_packages.stdout_lines + system_held_packages) | length }}"
-                    inline: true
-                description: |-
-                  {% if updates_available %}
-                  **📋 Upgradable packages:**
-                  ```
-                  {% for package in upgradable_packages_details.stdout_lines %}
-                  • {{ package }}
-                  {% endfor %}
-                  ```
-                  {% endif %}
-                  {% if held_updates_available %}
-                  **🔒 Held packages (excluded from update):**
-                  ```
-                  {% for package in manually_held_packages.stdout_lines %}
-                  • {{ package }} (manually held)
-                  {% endfor %}
-                  {% for package in system_held_packages %}
-                  • {{ package }} (system held)
-                  {% endfor %}
-                  ```
-                  {% endif %}
-                  {% if not updates_available and not held_updates_available %}
-                  **✅ System is up to date!**
-                  {% endif %}
-                footer:
-                  text: "Report generated on {{ ansible_date_time.iso8601 }}"
+        - name: Prepare Discord notification message
+          set_fact:
+            discord_message:
+              embeds:
+                - title: "🔄 Update Check for {{ inventory_hostname }}"
+                  color: "{{ '15158332' if updates_available else '3066993' }}"  # Red if updates available, Green if only held updates
+                  fields:
+                    - name: "🖥️ Host"
+                      value: "{{ inventory_hostname }}"
+                      inline: true
+                    - name: "📦 Updates Available"
+                      value: "{{ would_be_upgraded.stdout_lines | length }}"
+                      inline: true
+                    - name: "🔒 Held Updates"
+                      value: "{{ (manually_held_packages.stdout_lines + system_held_packages) | length }}"
+                      inline: true
+                  description: |-
+                    {% if updates_available %}
+                    **📋 Upgradable packages:**
+                    ```
+                    {% for package in upgradable_packages_details.stdout_lines %}
+                    • {{ package }}
+                    {% endfor %}
+                    ```
+                    {% endif %}
+                    {% if held_updates_available %}
+                    **🔒 Held packages (excluded from update):**
+                    ```
+                    {% for package in manually_held_packages.stdout_lines %}
+                    • {{ package }} (manually held)
+                    {% endfor %}
+                    {% for package in system_held_packages %}
+                    • {{ package }} (system held)
+                    {% endfor %}
+                    ```
+                    {% endif %}
+                    {% if not updates_available and not held_updates_available %}
+                    **✅ System is up to date!**
+                    {% endif %}
+                  footer:
+                    text: "Report generated on {{ ansible_date_time.iso8601 }}"
 
-      - name: Send Discord notification for updates available
-        uri:
-          url: "{{ update_required_webhook }}"
-          method: POST
-          body_format: json
-          body: "{{ discord_message }}"
-          status_code: [204, 200]  # Accept both 204 and 200 as success
-        when: 
-          - updates_available
-          - update_required_webhook | length > 0
+        - name: Send Discord notification for updates available
+          uri:
+            url: "{{ update_required_webhook }}"
+            method: POST
+            body_format: json
+            body: "{{ discord_message }}"
+            status_code: [204, 200]  # Accept both 204 and 200 as success
+          when: 
+            - updates_available
+            - update_required_webhook | length > 0
 
-      - name: Send Discord notification for held updates
-        uri:
-          url: "{{ update_held_webhook }}"
-          method: POST
-          body_format: json
-          body: "{{ discord_message }}"
-          status_code: [204, 200]  # Accept both 204 and 200 as success
-        when: 
-          - not updates_available
-          - held_updates_available
-          - update_held_webhook | length > 0
+        - name: Send Discord notification for held updates
+          uri:
+            url: "{{ update_held_webhook }}"
+            method: POST
+            body_format: json
+            body: "{{ discord_message }}"
+            status_code: [204, 200]  # Accept both 204 and 200 as success
+          when: 
+            - not updates_available
+            - held_updates_available
+            - update_held_webhook | length > 0
 
-      - name: Display update check report (Debug)
-        debug:
-          var: discord_message
-    when: not host_is_unreachable | default(false)
+        - name: Display update check report (Debug)
+          debug:
+            var: discord_message
+      when: not host_is_unreachable | default(false)
 
   post_tasks:
     - name: Ensure playbook completes successfully
