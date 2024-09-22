@@ -25,10 +25,24 @@
       set_fact:
         upgradable_packages: "{{ upgrade_dry_run.stdout_lines | select('match', '^Inst.*') | list }}"
 
-    - name: Get list of held packages
+    - name: Get list of manually held packages
       shell: apt-mark showhold
-      register: held_packages
+      register: manually_held_packages
       changed_when: false
+
+    - name: Get list of all upgradable packages
+      shell: apt list --upgradable 2>/dev/null | grep -v '^Listing...' | cut -d'/' -f1
+      register: all_upgradable_packages
+      changed_when: false
+
+    - name: Get list of packages that would be upgraded
+      shell: apt-get --simulate dist-upgrade | grep '^Inst' | awk '{print $2}'
+      register: would_be_upgraded
+      changed_when: false
+
+    - name: Identify system-held packages
+      set_fact:
+        system_held_packages: "{{ all_upgradable_packages.stdout_lines | difference(would_be_upgraded.stdout_lines) | difference(manually_held_packages.stdout_lines) }}"
 
     - name: Perform apt upgrade
       apt:
@@ -89,6 +103,9 @@
                 - name: "💾 Disk Space in Package Cache"
                   value: "{{ disk_space_cache.stdout.split()[0] }}"
                   inline: true
+                - name: "🔒 Held Packages"
+                  value: "{{ (manually_held_packages.stdout_lines + system_held_packages) | length }}"
+                  inline: true
               description: |-
                 {% if reboot_required_file.stat.exists %}
                 **⚠️ REBOOT REQUIRED ⚠️**
@@ -121,11 +138,14 @@
                 • Autoremove: {{ 'Performed' if autoremovable_packages | length > 0 else 'No packages to remove' }}
                 • Autoclean: Performed
 
-                {% if held_packages.stdout_lines | length > 0 %}
+                {% if manually_held_packages.stdout_lines | length > 0 or system_held_packages | length > 0 %}
                 **🔒 Held Packages:**
                 ```
-                {% for package in held_packages.stdout_lines %}
-                • {{ package }}
+                {% for package in manually_held_packages.stdout_lines %}
+                • {{ package }} (manually held)
+                {% endfor %}
+                {% for package in system_held_packages %}
+                • {{ package }} (system held)
                 {% endfor %}
                 ```
                 {% else %}
