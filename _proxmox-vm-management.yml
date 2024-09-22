@@ -44,7 +44,7 @@
                   value: "{{ proxmox_vm_id }}"
               description: "The resource was powered on to perform maintenance tasks."
               footer:
-                text: "Powered on at {{ ansible_date_time.iso8601 }}"
+                text: "Powered on at {{ lookup('pipe', 'date -u +\"%Y-%m-%dT%H:%M:%SZ\"') }}"
       delegate_to: localhost
       become: no
   when: 

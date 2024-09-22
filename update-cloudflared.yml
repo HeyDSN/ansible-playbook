@@ -9,7 +9,7 @@
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
     cloudflared_deb_url: "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb"
     temp_deb_path: "/tmp/cloudflared.deb"
-    playbook_name: "{{ ansible_play_name }}"
+    playbook_name: "update-cloudflared.yml"
 
   pre_tasks:
     - name: Check host connectivity

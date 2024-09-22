@@ -8,7 +8,7 @@
     ansible_ssh_args: '-o ControlMaster=no -o ControlPersist=no'
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
     threshold_percent: 80
-    playbook_name: "{{ ansible_play_name }}"
+    playbook_name: "check-diskspace.yml"
 
   pre_tasks:
     - name: Check host connectivity
