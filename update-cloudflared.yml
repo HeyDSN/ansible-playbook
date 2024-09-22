@@ -118,8 +118,3 @@
       debug:
         msg: "Cloudflared on {{ inventory_hostname }} has been updated to version {{ latest_version }}"
       when: cloudflared_updated.changed
-
-  post_tasks:
-    - name: Ensure playbook completes successfully
-      debug:
-        msg: "Playbook completed successfully. Some hosts may have been skipped due to being unreachable."

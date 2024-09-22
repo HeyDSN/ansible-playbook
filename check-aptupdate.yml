@@ -139,8 +139,3 @@
           debug:
             var: discord_message
       when: not host_is_unreachable | default(false)
-
-  post_tasks:
-    - name: Ensure playbook completes successfully
-      debug:
-        msg: "Playbook completed successfully. Some hosts may have been skipped due to being unreachable."

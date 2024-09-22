@@ -106,8 +106,3 @@
     - name: Debug disk usage (always show)
       ansible.builtin.debug:
         var: disks_over_threshold
-
-  post_tasks:
-    - name: Ensure playbook completes successfully
-      debug:
-        msg: "Playbook completed successfully. Some hosts may have been skipped due to being unreachable."
