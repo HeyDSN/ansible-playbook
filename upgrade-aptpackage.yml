@@ -185,7 +185,7 @@
       block:
         - name: Stop Proxmox resource
           uri:
-            url: "http://{{ proxmox_host }}:8006/api2/json/nodes/{{ proxmox_node }}/{{ resource_type }}/{{ proxmox_vm_id }}/status/stop"
+            url: "http://{{ proxmox_host }}/api2/json/nodes/{{ proxmox_node }}/{{ resource_type }}/{{ proxmox_vm_id }}/status/stop"
             method: POST
             validate_certs: no
             headers:
