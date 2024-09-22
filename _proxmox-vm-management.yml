@@ -56,8 +56,8 @@
   wait_for:
     host: "{{ ansible_host }}"
     port: 22
-    delay: 300
-    timeout: 1200
+    delay: 30
+    timeout: 300
   when: resource_state.json.data.status == 'stopped'
   delegate_to: localhost
   become: no
