@@ -5,6 +5,11 @@
   vars:
     ansible_ssh_args: '-o ControlMaster=no -o ControlPersist=no'
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+
+  pre_tasks:
+    - name: Include pre-requisite tasks
+      include_tasks: _prereq_tasks.yml
+
   tasks:
     - name: Update apt cache
       apt:

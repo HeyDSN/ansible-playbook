@@ -1,0 +1,42 @@
+---
+- name: Ensure required packages are installed
+  block:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+      when: ansible_os_family == "Debian"
+
+    - name: Install common required packages
+      package:
+        name:
+          - python3
+          - sudo
+          - coreutils
+          - procps
+          - grep
+          - sed
+          - gawk
+        state: present
+
+    - name: Install Debian-specific packages
+      apt:
+        name:
+          - python3-apt
+          - apt-utils
+        state: present
+      when: ansible_os_family == "Debian"
+
+    - name: Install QEMU guest agent if VM
+      package:
+        name: qemu-guest-agent
+        state: present
+      when: ansible_virtualization_type == "kvm"
+
+    - name: Install LXC if running in container
+      package:
+        name: lxc
+        state: present
+      when: ansible_virtualization_type == "lxc"
+
+  become: yes
+  ignore_errors: yes

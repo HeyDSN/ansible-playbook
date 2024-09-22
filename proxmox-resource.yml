@@ -10,6 +10,10 @@
     memory_underuse_threshold: 60  # Memory usage below this % is considered underutilized
     overcommit_ratio: 1.5  # Ratio for suggesting resource reallocation
 
+  pre_tasks:
+    - name: Include pre-requisite tasks
+      include_tasks: _prereq_tasks.yml
+
   tasks:
     - name: Collect VM and LXC resource usage
       shell: |

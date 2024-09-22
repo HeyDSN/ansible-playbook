@@ -12,6 +12,10 @@
     guest_cpu_threshold: 70
     guest_memory_threshold: 80
 
+  pre_tasks:
+    - name: Include pre-requisite tasks
+      include_tasks: _prereq_tasks.yml
+
   tasks:
     - name: Collect system-wide performance metrics
       shell: |

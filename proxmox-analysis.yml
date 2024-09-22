@@ -19,6 +19,10 @@
       - "Failed password"
       - "Invalid user"
 
+  pre_tasks:
+    - name: Include pre-requisite tasks
+      include_tasks: _prereq_tasks.yml
+
   tasks:
     - name: Collect and analyze logs
       shell: |

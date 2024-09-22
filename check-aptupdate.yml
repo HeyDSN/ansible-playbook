@@ -7,6 +7,11 @@
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
     update_required_webhook: "{{ lookup('env', 'ADW_UPDATE') }}"
     update_held_webhook: "{{ lookup('env', 'ADW_NOTIF') }}"
+
+  pre_tasks:
+    - name: Include pre-requisite tasks
+      include_tasks: _prereq_tasks.yml
+
   tasks:
     - name: Check for updates
       apt:
