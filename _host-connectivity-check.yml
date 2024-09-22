@@ -34,6 +34,11 @@
     - host_reachable is failed
     - lookup('env', 'ADW_PROXMOX') | length > 0
 
+- name: Set host as unreachable
+  set_fact:
+    host_is_unreachable: true
+  when: host_reachable is failed
+
 - name: Skip unreachable host
   meta: end_host
-  when: host_reachable is failed
+  when: host_is_unreachable | default(false)
