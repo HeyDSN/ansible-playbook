@@ -31,9 +31,9 @@
             text: "Notification sent on {{ ansible_date_time.iso8601 }}"
   delegate_to: localhost
   when: 
-    - not host_reachable.is_successful
+    - host_reachable is failed
     - lookup('env', 'ADW_PROXMOX') | length > 0
 
 - name: Skip unreachable host
   meta: end_host
-  when: not host_reachable.is_successful
+  when: host_reachable is failed
