@@ -5,10 +5,6 @@
   ignore_errors: yes
   register: host_reachable
 
-- name: Gather facts if host is reachable
-  setup:
-  when: host_reachable is success
-
 - name: Send notification for unreachable host
   uri:
     url: "{{ lookup('env', 'ADW_PROXMOX') }}"
