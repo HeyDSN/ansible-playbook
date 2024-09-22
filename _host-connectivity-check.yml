@@ -5,6 +5,10 @@
   ignore_errors: yes
   register: host_reachable
 
+- name: Gather facts if host is reachable
+  setup:
+  when: host_reachable is success
+
 - name: Send notification for unreachable host
   uri:
     url: "{{ lookup('env', 'ADW_PROXMOX') }}"
@@ -28,8 +32,10 @@
             The host is currently unreachable during the execution of the {{ ansible_play_name | default(playbook_name, true) }} playbook.
             The playbook execution will be skipped for this host but will continue for other reachable hosts.
           footer:
-            text: "Notification sent on {{ lookup('pipe', 'date -u +\"%Y-%m-%dT%H:%M:%SZ\"') }}"
+            text: "Notification sent on {{ ansible_date_time.iso8601 | default(lookup('pipe', 'date -u +\"%Y-%m-%dT%H:%M:%SZ\"')) }}"
   delegate_to: localhost
+  vars:
+    ansible_remote_tmp: /tmp
   when: 
     - host_reachable is failed
     - lookup('env', 'ADW_PROXMOX') | length > 0

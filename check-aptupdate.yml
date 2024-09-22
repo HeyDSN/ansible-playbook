@@ -4,6 +4,7 @@
   become: yes
   ignore_unreachable: yes  # Add this line
   vars:
+    ansible_remote_tmp: /tmp
     ansible_ssh_args: '-o ControlMaster=no -o ControlPersist=no'
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
     update_required_webhook: "{{ lookup('env', 'ADW_UPDATE') }}"
