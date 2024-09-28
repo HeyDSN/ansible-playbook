@@ -19,24 +19,18 @@
         msg: "docker-compose.yml not found in {{ compose_dir }}"
       when: not compose_file.stat.exists
 
-    - name: Pull latest images
-      community.docker.docker_compose:
+    - name: Pull latest images and check for updates
+      community.docker.docker_compose_v2:
         project_src: "{{ compose_dir }}"
-        pull: yes
-      register: pull_result
-
-    - name: Check if any images were updated
-      set_fact:
-        images_updated: "{{ pull_result.changed }}"
-
-    - name: Recreate containers with updated images
-      community.docker.docker_compose:
-        project_src: "{{ compose_dir }}"
-        recreate: smart
+        pull: always
         state: present
-      when: images_updated
+      register: compose_result
+
+    - name: Check if any containers were updated
+      set_fact:
+        containers_updated: "{{ compose_result.changed }}"
 
     - name: Prune unused images
       community.docker.docker_prune:
         images: yes
-      when: images_updated
+      when: containers_updated
