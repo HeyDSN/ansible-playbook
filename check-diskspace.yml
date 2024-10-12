@@ -54,15 +54,11 @@
           print(json.dumps(disks_over_threshold))
         dest: /tmp/parse_disk_usage.py
         mode: '0755'
-      async: "{{ global_timeout }}"
-      poll: 5
 
     - name: Get disk space usage and parse
       ansible.builtin.shell: df -h | awk '{if (NR!=1) {print $1,$5,$6}}' | grep -vE '^tmpfs|^udev|^/dev/loop' | python3 /tmp/parse_disk_usage.py {{ threshold_percent }}
       register: parsed_disk_usage
       changed_when: false
-      async: "{{ global_timeout }}"
-      poll: 5
 
     - name: Set fact for disks over threshold
       ansible.builtin.set_fact:
