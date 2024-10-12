@@ -10,6 +10,7 @@
     update_required_webhook: "{{ lookup('env', 'ADW_UPDATE') }}"
     update_held_webhook: "{{ lookup('env', 'ADW_NOTIF') }}"
     playbook_name: "check-aptupdate.yml"
+    global_timeout: 600  # 10 minutes in seconds
 
   pre_tasks:
     - name: Check host connectivity
@@ -22,10 +23,14 @@
     - name: Gather facts
       setup:
       when: not host_is_unreachable | default(false)
+      async: "{{ global_timeout }}"
+      poll: 5
 
     - name: Include pre-requisite tasks
       include_tasks: _prereq_tasks.yml
       when: not host_is_unreachable | default(false)
+      async: "{{ global_timeout }}"
+      poll: 5
 
   tasks:
     - name: Run update tasks
@@ -34,21 +39,29 @@
           apt:
             update_cache: yes
           register: apt_update_result
+          async: "{{ global_timeout }}"
+          poll: 5
 
         - name: Get list of manually held packages
           shell: apt-mark showhold
           register: manually_held_packages
           changed_when: false
+          async: "{{ global_timeout }}"
+          poll: 5
 
         - name: Get list of all upgradable packages
           shell: apt list --upgradable 2>/dev/null | grep -v '^Listing...' | cut -d'/' -f1
           register: all_upgradable_packages
           changed_when: false
+          async: "{{ global_timeout }}"
+          poll: 5
 
         - name: Get list of packages that would be upgraded
           shell: apt-get --simulate dist-upgrade | grep '^Inst' | awk '{print $2}'
           register: would_be_upgraded
           changed_when: false
+          async: "{{ global_timeout }}"
+          poll: 5
 
         - name: Identify system-held packages
           set_fact:
@@ -64,6 +77,8 @@
             done
           register: upgradable_packages_details
           changed_when: false
+          async: "{{ global_timeout }}"
+          poll: 5
 
         - name: Set update flags
           set_fact:
@@ -122,6 +137,8 @@
           when: 
             - updates_available
             - update_required_webhook | length > 0
+          async: "{{ global_timeout }}"
+          poll: 5
 
         - name: Send Discord notification for held updates
           uri:
@@ -134,6 +151,8 @@
             - not updates_available
             - held_updates_available
             - update_held_webhook | length > 0
+          async: "{{ global_timeout }}"
+          poll: 5
 
         - name: Display update check report (Debug)
           debug:

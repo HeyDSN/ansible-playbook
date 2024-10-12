@@ -11,10 +11,13 @@
     cpu_underuse_threshold: 40  # CPU usage below this % is considered underutilized
     memory_underuse_threshold: 60  # Memory usage below this % is considered underutilized
     overcommit_ratio: 1.5  # Ratio for suggesting resource reallocation
+    global_timeout: 600  # 10 minutes in seconds
 
   pre_tasks:
     - name: Include pre-requisite tasks
       include_tasks: _prereq_tasks.yml
+      async: "{{ global_timeout }}"
+      poll: 5
 
   tasks:
     - name: Collect VM and LXC resource usage
@@ -42,6 +45,8 @@
           fi
         done
       register: resource_usage
+      async: "{{ global_timeout }}"
+      poll: 5
 
     - name: Analyze resource usage and generate optimization report
       set_fact:
@@ -98,6 +103,8 @@
         body: "{{ optimization_report }}"
         status_code: [204, 200]
       when: discord_webhook | length > 0
+      async: "{{ global_timeout }}"
+      poll: 5
 
     - name: Display optimization report (Debug)
       debug:

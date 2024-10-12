@@ -9,6 +9,7 @@
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
     threshold_percent: 80
     playbook_name: "check-diskspace.yml"
+    global_timeout: 600  # 10 minutes in seconds
 
   pre_tasks:
     - name: Check host connectivity
@@ -21,9 +22,13 @@
     - name: Gather facts
       setup:
       when: not host_is_unreachable | default(false)
+      async: "{{ global_timeout }}"
+      poll: 5
 
     - name: Include pre-requisite tasks
       include_tasks: _prereq_tasks.yml
+      async: "{{ global_timeout }}"
+      poll: 5
 
   tasks:
     - name: Create disk usage parser script
@@ -51,11 +56,15 @@
           print(json.dumps(disks_over_threshold))
         dest: /tmp/parse_disk_usage.py
         mode: '0755'
+      async: "{{ global_timeout }}"
+      poll: 5
 
     - name: Get disk space usage and parse
       ansible.builtin.shell: df -h | awk '{if (NR!=1) {print $1,$5,$6}}' | grep -vE '^tmpfs|^udev|^/dev/loop' | python3 /tmp/parse_disk_usage.py {{ threshold_percent }}
       register: parsed_disk_usage
       changed_when: false
+      async: "{{ global_timeout }}"
+      poll: 5
 
     - name: Set fact for disks over threshold
       ansible.builtin.set_fact:
@@ -102,6 +111,8 @@
       when: 
         - disks_over_threshold | length > 0
         - lookup('env', 'ADW_NOTIF') | length > 0
+      async: "{{ global_timeout }}"
+      poll: 5
 
     - name: Debug disk usage (always show)
       ansible.builtin.debug:

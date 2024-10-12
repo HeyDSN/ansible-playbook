@@ -13,10 +13,13 @@
     system_storage_threshold: 70
     guest_cpu_threshold: 70
     guest_memory_threshold: 80
+    global_timeout: 600  # 10 minutes in seconds
 
   pre_tasks:
     - name: Include pre-requisite tasks
       include_tasks: _prereq_tasks.yml
+      async: "{{ global_timeout }}"
+      poll: 5
 
   tasks:
     - name: Collect system-wide performance metrics
@@ -25,6 +28,8 @@
         echo "Memory Usage: $(free | grep Mem | awk '{print $3/$2 * 100.0}')%"
         echo "Storage Usage: $(df -h / | awk '/\// {print $5}')"
       register: system_metrics
+      async: "{{ global_timeout }}"
+      poll: 5
 
     - name: Collect VM metrics
       shell: |
@@ -46,6 +51,8 @@
           fi
         done
       register: vm_metrics
+      async: "{{ global_timeout }}"
+      poll: 5
 
     - name: Collect LXC metrics
       shell: |
@@ -61,6 +68,8 @@
           fi
         done
       register: lxc_metrics
+      async: "{{ global_timeout }}"
+      poll: 5
 
     - name: Generate system alerts
       set_fact:
@@ -145,6 +154,8 @@
         body: "{{ performance_report }}"
         status_code: [204, 200]
       when: discord_webhook | length > 0
+      async: "{{ global_timeout }}"
+      poll: 5
 
     - name: Display performance report (Debug)
       debug:

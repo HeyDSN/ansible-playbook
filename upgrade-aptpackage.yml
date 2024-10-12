@@ -9,91 +9,128 @@
     proxmox_host: "{{ lookup('env', 'PROXMOX_HOST') }}"
     proxmox_node: "{{ lookup('env', 'PROXMOX_NODE') }}"
     proxmox_api_token: "{{ lookup('env', 'PROXMOX_API_TOKEN') }}"
+    global_timeout: 600  # 10 minutes in seconds
 
   pre_tasks:
     - name: Include Proxmox resource management tasks
       include_tasks: _proxmox-vm-management.yml
       when: "'proxmox_vm_id' in hostvars[inventory_hostname]"
+      async: "{{ global_timeout }}"
+      poll: 5
 
     - name: Gather facts
       setup:
+      async: "{{ global_timeout }}"
+      poll: 5
 
     - name: Include pre-requisite tasks
       include_tasks: _prereq_tasks.yml
+      async: "{{ global_timeout }}"
+      poll: 5
 
   tasks:
     - name: Update apt cache
       apt:
         update_cache: yes
       register: apt_update_result
+      async: "{{ global_timeout }}"
+      poll: 5
 
     - name: Get upgradable packages (dry-run)
       command: apt-get -s upgrade
       register: upgrade_dry_run
       changed_when: false
+      async: "{{ global_timeout }}"
+      poll: 5
 
     - name: Parse upgradable packages
       set_fact:
         upgradable_packages: "{{ upgrade_dry_run.stdout_lines | select('match', '^Inst.*') | list }}"
+      async: "{{ global_timeout }}"
+      poll: 5
 
     - name: Get list of manually held packages
       shell: apt-mark showhold
       register: manually_held_packages
       changed_when: false
+      async: "{{ global_timeout }}"
+      poll: 5
 
     - name: Get list of all upgradable packages
       shell: apt list --upgradable 2>/dev/null | grep -v '^Listing...' | cut -d'/' -f1
       register: all_upgradable_packages
       changed_when: false
+      async: "{{ global_timeout }}"
+      poll: 5
 
     - name: Get list of packages that would be upgraded
       shell: apt-get --simulate dist-upgrade | grep '^Inst' | awk '{print $2}'
       register: would_be_upgraded
       changed_when: false
+      async: "{{ global_timeout }}"
+      poll: 5
 
     - name: Identify system-held packages
       set_fact:
         system_held_packages: "{{ all_upgradable_packages.stdout_lines | difference(would_be_upgraded.stdout_lines) | difference(manually_held_packages.stdout_lines) }}"
+      async: "{{ global_timeout }}"
+      poll: 5
 
     - name: Perform apt upgrade
       apt:
         upgrade: yes
       register: apt_upgrade_result
       when: upgradable_packages | length > 0
+      async: "{{ global_timeout }}"
+      poll: 5
 
     - name: Perform apt autoremove (dry-run)
       command: apt-get --dry-run autoremove
       register: autoremove_dry_run
       changed_when: false
+      async: "{{ global_timeout }}"
+      poll: 5
 
     - name: Parse autoremovable packages
       set_fact:
         autoremovable_packages: "{{ autoremove_dry_run.stdout_lines | select('match', '^Remv.*') | list }}"
+      async: "{{ global_timeout }}"
+      poll: 5
 
     - name: Perform apt autoremove
       apt:
         autoremove: yes
       register: apt_autoremove_result
       when: autoremovable_packages | length > 0
+      async: "{{ global_timeout }}"
+      poll: 5
 
     - name: Perform apt autoclean
       apt:
         autoclean: yes
       register: apt_autoclean_result
+      async: "{{ global_timeout }}"
+      poll: 5
 
     - name: Check if reboot is required
       stat:
         path: /var/run/reboot-required
       register: reboot_required_file
+      async: "{{ global_timeout }}"
+      poll: 5
 
     - name: Get disk space in package cache
       shell: du -sh /var/cache/apt/archives
       register: disk_space_cache
       changed_when: false
+      async: "{{ global_timeout }}"
+      poll: 5
 
     - name: Set notification flag
       set_fact:
         should_notify: "{{ (upgradable_packages | length > 0) or (autoremovable_packages | length > 0) or reboot_required_file.stat.exists }}"
+      async: "{{ global_timeout }}"
+      poll: 5
 
     - name: Prepare Discord notification message
       set_fact:
@@ -174,6 +211,8 @@
         body: "{{ discord_message }}"
         status_code: [204, 200]  # Accept both 204 and 200 as success
       when: should_notify and lookup('env', 'ADW_UPDATE') | length > 0
+      async: "{{ global_timeout }}"
+      poll: 5
 
     - name: Display upgrade report (Debug)
       debug:
@@ -220,3 +259,5 @@
         - original_resource_state == 'stopped'
         - "'proxmox_vm_id' in hostvars[inventory_hostname]"
         - lookup('env', 'ADW_PROXMOX') | length > 0
+      async: "{{ global_timeout }}"
+      poll: 5
