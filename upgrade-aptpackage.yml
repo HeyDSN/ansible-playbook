@@ -42,8 +42,6 @@
     - name: Parse upgradable packages
       set_fact:
         upgradable_packages: "{{ upgrade_dry_run.stdout_lines | select('match', '^Inst.*') | list }}"
-      async: "{{ global_timeout }}"
-      poll: 5
 
     - name: Get list of manually held packages
       shell: apt-mark showhold
@@ -69,8 +67,6 @@
     - name: Identify system-held packages
       set_fact:
         system_held_packages: "{{ all_upgradable_packages.stdout_lines | difference(would_be_upgraded.stdout_lines) | difference(manually_held_packages.stdout_lines) }}"
-      async: "{{ global_timeout }}"
-      poll: 5
 
     - name: Perform apt upgrade
       apt:
@@ -90,8 +86,6 @@
     - name: Parse autoremovable packages
       set_fact:
         autoremovable_packages: "{{ autoremove_dry_run.stdout_lines | select('match', '^Remv.*') | list }}"
-      async: "{{ global_timeout }}"
-      poll: 5
 
     - name: Perform apt autoremove
       apt:
@@ -125,8 +119,6 @@
     - name: Set notification flag
       set_fact:
         should_notify: "{{ (upgradable_packages | length > 0) or (autoremovable_packages | length > 0) or reboot_required_file.stat.exists }}"
-      async: "{{ global_timeout }}"
-      poll: 5
 
     - name: Prepare Discord notification message
       set_fact:

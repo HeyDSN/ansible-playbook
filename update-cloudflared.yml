@@ -60,15 +60,11 @@
       set_fact:
         latest_version: "{{ latest_release.json.tag_name }}"
       when: cloudflared_check.rc == 0
-      async: "{{ global_timeout }}"
-      poll: 5
 
     - name: Compare versions
       set_fact:
         update_needed: "{{ installed_version.stdout is not defined or installed_version.stdout.split()[1] != latest_version }}"
       when: cloudflared_check.rc == 0
-      async: "{{ global_timeout }}"
-      poll: 5
 
     - name: Download latest Cloudflared deb package
       command: "curl -L --output {{ temp_deb_path }} {{ cloudflared_deb_url }}"
