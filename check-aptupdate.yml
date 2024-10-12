@@ -29,8 +29,6 @@
     - name: Include pre-requisite tasks
       include_tasks: _prereq_tasks.yml
       when: not host_is_unreachable | default(false)
-      async: "{{ global_timeout }}"
-      poll: 5
 
   tasks:
     - name: Run update tasks

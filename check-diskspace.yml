@@ -27,8 +27,6 @@
 
     - name: Include pre-requisite tasks
       include_tasks: _prereq_tasks.yml
-      async: "{{ global_timeout }}"
-      poll: 5
 
   tasks:
     - name: Create disk usage parser script

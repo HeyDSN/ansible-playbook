@@ -15,8 +15,6 @@
     - name: Include Proxmox resource management tasks
       include_tasks: _proxmox-vm-management.yml
       when: "'proxmox_vm_id' in hostvars[inventory_hostname]"
-      async: "{{ global_timeout }}"
-      poll: 5
 
     - name: Gather facts
       setup:
@@ -25,8 +23,6 @@
 
     - name: Include pre-requisite tasks
       include_tasks: _prereq_tasks.yml
-      async: "{{ global_timeout }}"
-      poll: 5
 
   tasks:
     - name: Update apt cache
