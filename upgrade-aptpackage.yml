@@ -255,5 +255,3 @@
         - original_resource_state == 'stopped'
         - "'proxmox_vm_id' in hostvars[inventory_hostname]"
         - lookup('env', 'ADW_PROXMOX') | length > 0
-      async: "{{ global_timeout }}"
-      poll: 5
