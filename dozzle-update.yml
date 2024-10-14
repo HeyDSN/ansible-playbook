@@ -4,7 +4,7 @@
   become: yes
   vars:
     ansible_remote_tmp: /tmp
-    ansible_ssh_args: '-o ControlMaster=no -o ControlPersist=no'
+    ansible_ssh_args: '-o ControlMaster=auto -o ControlPersist=10m'
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
     compose_dir: /home/ubuntu/dozzle
     global_timeout: 600  # 10 minutes in seconds

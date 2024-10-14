@@ -5,7 +5,7 @@
   become: yes
   vars:
     ansible_remote_tmp: /tmp
-    ansible_ssh_args: '-o ControlMaster=no -o ControlPersist=no'
+    ansible_ssh_args: '-o ControlMaster=auto -o ControlPersist=10m'
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
     discord_webhook: "{{ lookup('env', 'ADW_PROXMOX') }}"
     cpu_underuse_threshold: 40  # CPU usage below this % is considered underutilized
