@@ -5,30 +5,19 @@
   become: yes
   vars: 
     ansible_remote_tmp: /tmp
-    ansible_ssh_pipelining: true
-    ansible_ssh_args: '-o ControlMaster=auto -o ControlPersist=60s -o ServerAliveInterval=30 -o ServerAliveCountMax=3'
-    ansible_connection_timeout: 30
+    ansible_ssh_args: '-o ControlMaster=auto -o ControlPersist=10m'
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
     pb_config_ng_dir: /home/debian/pb-config-ng
     managed_api_dir: "{{ pb_config_ng_dir }}/managed-api"
     global_timeout: 600  # 10 minutes in seconds
   tasks:
-    - name: Configure Git safe directory to handle dubious ownership
-      shell: git config --global --add safe.directory {{ pb_config_ng_dir }}
-      changed_when: false
-      ignore_errors: true
-      
-    - name: Add GitHub to known hosts
-      shell: mkdir -p ~/.ssh && touch ~/.ssh/known_hosts && ssh-keyscan -H github.com >> ~/.ssh/known_hosts
-      changed_when: false
-      ignore_errors: true
-
     - name: Change to pb-config-ng directory and pull latest changes
-      shell: sudo su && cd {{ pb_config_ng_dir }} && GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=no" git pull
+      shell: cd {{ pb_config_ng_dir }} && git pull
       register: git_result
       changed_when: git_result.stdout != 'Already up to date.'
 
     - name: Restart Docker Compose services if changes detected
-      shell: sudo su && cd {{ managed_api_dir }} && docker compose restart
+      shell: cd {{ managed_api_dir }} && docker compose restart
       when: git_result.stdout != 'Already up to date.'
 
     - name: Display status message
