@@ -11,12 +11,6 @@
     managed_api_dir: "{{ pb_config_ng_dir }}/managed-api"
     global_timeout: 600  # 10 minutes in seconds
   tasks:
-    - name: WHO AM I
-      become: yes
-      become_user: debian
-      shell: echo "$USER"
-      register: current_user
-
     - name: Change to pb-config-ng directory and pull latest changes
       become: yes
       become_user: debian
@@ -29,7 +23,7 @@
       become: yes
       become_user: debian
       shell: cd {{ managed_api_dir }} && docker compose restart
-      # when: git_result.stdout != 'Already up to date.'
+      when: git_result.stdout != 'Already up to date.'
       failed_when: false
 
     - name: Display status message

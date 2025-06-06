@@ -11,9 +11,6 @@
     managed_api_dir: "{{ pb_config_ng_dir }}/managed-api"
     global_timeout: 600  # 10 minutes in seconds
   tasks:
-    - name: WHO AM I
-      shell: echo "$USER" && echo badjingan
-
     - name: Change to pb-config-ng directory and pull latest changes
       shell: cd {{ pb_config_ng_dir }} && git pull
       register: git_result
