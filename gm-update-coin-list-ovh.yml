@@ -5,6 +5,9 @@
   become: yes
   vars: 
     ansible_remote_tmp: /tmp
+    ansible_ssh_pipelining: true
+    ansible_ssh_args: '-o ControlMaster=auto -o ControlPersist=60s -o ServerAliveInterval=30 -o ServerAliveCountMax=3'
+    ansible_connection_timeout: 30
     pb_config_ng_dir: /home/debian/pb-config-ng
     managed_api_dir: "{{ pb_config_ng_dir }}/managed-api"
     global_timeout: 600  # 10 minutes in seconds
