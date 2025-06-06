@@ -1,0 +1,25 @@
+---
+- name: Update Coin List - IONOS
+  hosts: ionos
+  gather_facts: no
+  become: yes
+  vars: 
+    ansible_remote_tmp: /tmp
+    ansible_ssh_args: '-o ControlMaster=auto -o ControlPersist=10m'
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+    pb_config_ng_dir: /root/pb-config-ng
+    managed_api_dir: "{{ pb_config_ng_dir }}/managed-api"
+    global_timeout: 600  # 10 minutes in seconds
+  tasks:
+    - name: Change to pb-config-ng directory and pull latest changes
+      shell: cd {{ pb_config_ng_dir }} && git pull
+      register: git_result
+      changed_when: git_result.stdout != 'Already up to date.'
+
+    - name: Restart Docker Compose services if changes detected
+      shell: cd {{ managed_api_dir }} && docker compose restart
+      when: git_result.stdout != 'Already up to date.'
+
+    - name: Display status message
+      debug:
+        msg: "{{ 'Changes detected, services restarted' if git_result.stdout != 'Already up to date.' else 'No changes detected, no action taken' }}"
