@@ -16,9 +16,14 @@
       shell: git config --global --add safe.directory {{ pb_config_ng_dir }}
       changed_when: false
       ignore_errors: true
+      
+    - name: Add GitHub to known hosts
+      shell: mkdir -p ~/.ssh && touch ~/.ssh/known_hosts && ssh-keyscan -H github.com >> ~/.ssh/known_hosts
+      changed_when: false
+      ignore_errors: true
 
     - name: Change to pb-config-ng directory and pull latest changes
-      shell: sudo su && cd {{ pb_config_ng_dir }} && git pull
+      shell: sudo su && cd {{ pb_config_ng_dir }} && GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=no" git pull
       register: git_result
       changed_when: git_result.stdout != 'Already up to date.'
 
