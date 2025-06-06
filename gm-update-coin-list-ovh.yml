@@ -29,7 +29,7 @@
       become: yes
       become_user: debian
       shell: cd {{ managed_api_dir }} && docker compose restart
-      when: git_result.stdout != 'Already up to date.'
+      # when: git_result.stdout != 'Already up to date.'
       failed_when: false
 
     - name: Display status message
