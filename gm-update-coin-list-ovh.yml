@@ -18,12 +18,12 @@
       ignore_errors: true
 
     - name: Change to pb-config-ng directory and pull latest changes
-      shell: cd {{ pb_config_ng_dir }} && git pull
+      shell: sudo su && cd {{ pb_config_ng_dir }} && git pull
       register: git_result
       changed_when: git_result.stdout != 'Already up to date.'
 
     - name: Restart Docker Compose services if changes detected
-      shell: cd {{ managed_api_dir }} && docker compose restart
+      shell: sudo su && cd {{ managed_api_dir }} && docker compose restart
       when: git_result.stdout != 'Already up to date.'
 
     - name: Display status message
