@@ -12,16 +12,23 @@
     global_timeout: 600  # 10 minutes in seconds
   tasks:
     - name: WHO AM I
-      shell: echo "$USER" && echo badjingan
+      shell: echo "$USER"
+      register: current_user
 
     - name: Change to pb-config-ng directory and pull latest changes
+      become: yes
+      become_user: debian
       shell: cd {{ pb_config_ng_dir }} && git pull
       register: git_result
       changed_when: git_result.stdout != 'Already up to date.'
+      failed_when: false
 
     - name: Restart Docker Compose services if changes detected
+      become: yes
+      become_user: debian
       shell: cd {{ managed_api_dir }} && docker compose restart
       when: git_result.stdout != 'Already up to date.'
+      failed_when: false
 
     - name: Display status message
       debug:
