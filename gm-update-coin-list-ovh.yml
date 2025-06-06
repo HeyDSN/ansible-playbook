@@ -20,7 +20,6 @@
       shell: cd {{ pb_config_ng_dir }} && git pull
       register: git_result
       changed_when: git_result.stdout != 'Already up to date.'
-      failed_when: false
 
     - name: Restart Docker Compose services if changes detected
       shell: cd {{ managed_api_dir }} && docker compose restart
