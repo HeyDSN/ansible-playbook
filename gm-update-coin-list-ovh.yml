@@ -12,6 +12,8 @@
     global_timeout: 600  # 10 minutes in seconds
   tasks:
     - name: WHO AM I
+      become: yes
+      become_user: debian
       shell: echo "$USER"
       register: current_user
 
