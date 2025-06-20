@@ -1,0 +1,55 @@
+---
+- name: Rotate Coin
+  hosts: ovh-master
+  gather_facts: no
+  become: yes
+  vars: 
+    ansible_remote_tmp: /tmp
+    ansible_ssh_args: '-o ControlMaster=auto -o ControlPersist=10m'
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+    pb_config_ng_dir: /home/debian/pb-config-ng
+    tools_dir: "{{ pb_config_ng_dir }}/tools/filter_coin"
+    global_timeout: 600  # 10 minutes in seconds
+  tasks:
+    - name: Change to pb-config-ng directory and pull latest changes
+      become: yes
+      become_user: debian
+      shell: cd {{ pb_config_ng_dir }} && git pull
+      register: git_result
+      failed_when: git_result.rc != 0
+      changed_when: git_result.stdout != 'Already up to date.'
+      # Add timeout to prevent hanging
+      async: "{{ global_timeout }}"
+      poll: 5
+
+    - name: Display git status
+      become: yes
+      become_user: debian
+      debug:
+        msg: "{{ git_result.stdout_lines }}"
+
+    - name: Rotate coin
+      become: yes
+      become_user: debian
+      shell: cd {{ tools_dir }} && python -u filter_coins.py --once
+      register: python_result
+      # The -u flag makes Python output unbuffered, which helps with real-time logging
+      failed_when: python_result.rc != 0
+      # Add timeout to prevent hanging
+      async: "{{ global_timeout }}"
+      poll: 5
+
+    - name: Display Python script output
+      become: yes
+      become_user: debian
+      debug:
+        msg: "{{ python_result.stdout_lines }}"
+      when: python_result.stdout_lines | length > 0
+
+    - name: Display Python script errors (if any)
+      become: yes
+      become_user: debian
+      debug:
+        msg: "{{ python_result.stderr_lines }}"
+      when: python_result.stderr_lines | length > 0
+ 
