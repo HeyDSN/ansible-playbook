@@ -45,7 +45,6 @@
 
     - name: Restart Docker Compose services if changes detected
       shell: cd {{ pb_config_ng_dir }} && timeout 300 ./docker_update.sh
-      become: yes  # Only elevate privileges when needed for Docker
       when: git_result.stdout != 'Already up to date.'
       register: docker_result
       failed_when: docker_result.rc != 0
