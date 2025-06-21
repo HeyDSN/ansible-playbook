@@ -10,17 +10,51 @@
     pb_config_ng_dir: /home/ubuntu/pb-config-ng
     global_timeout: 600  # 10 minutes in seconds
   tasks:
+    - name: Check if pb-config-ng directory exists
+      stat:
+        path: "{{ pb_config_ng_dir }}"
+      register: dir_check
+
+    - name: Fail if directory doesn't exist
+      fail:
+        msg: "Directory {{ pb_config_ng_dir }} does not exist"
+      when: not dir_check.stat.exists
+
+    - name: Check git repository status
+      shell: cd {{ pb_config_ng_dir }} && git status --porcelain
+      register: git_status
+      changed_when: false
+      failed_when: false
+
+    - name: Reset git repository if dirty
+      shell: cd {{ pb_config_ng_dir }} && git reset --hard HEAD
+      when: git_status.stdout != ""
+      register: git_reset
+
     - name: Change to pb-config-ng directory and pull latest changes
-      shell: cd {{ pb_config_ng_dir }} && git pull
+      shell: cd {{ pb_config_ng_dir }} && timeout 300 git pull
       register: git_result
       changed_when: git_result.stdout != 'Already up to date.'
-      failed_when: false
+      failed_when: git_result.rc != 0
+      async: 360  # 6 minutes async timeout
+      poll: 10    # Check every 10 seconds
+
+    - name: Display git pull result
+      debug:
+        msg: "Git pull output: {{ git_result.stdout }}"
 
     - name: Restart Docker Compose services if changes detected
-      shell: cd {{ pb_config_ng_dir }} && ./docker_update.sh
+      shell: cd {{ pb_config_ng_dir }} && timeout 300 ./docker_update.sh
       when: git_result.stdout != 'Already up to date.'
-      failed_when: false
+      register: docker_result
+      failed_when: docker_result.rc != 0
+      async: 360  # 6 minutes async timeout
+      poll: 10    # Check every 10 seconds
 
-    - name: Display status message
+    - name: Display docker update result
+      debug:
+        msg: "Docker update output: {{ docker_result.stdout | default('No docker update needed') }}"
+
+    - name: Display final status message
       debug:
         msg: "{{ 'Changes detected, services restarted' if git_result.stdout != 'Already up to date.' else 'No changes detected, no action taken' }}"
