@@ -1,6 +1,6 @@
 ---
 - name: Rotate Coin
-  hosts: ovh-master
+  hosts: ovh_master
   gather_facts: no
   become: yes
   vars: 
