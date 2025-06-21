@@ -26,10 +26,10 @@
       changed_when: false
       failed_when: false
 
-    - name: Reset git repository if dirty
-      shell: cd {{ pb_config_ng_dir }} && git reset --hard HEAD
-      when: git_status.stdout != ""
-      register: git_reset
+    # - name: Reset git repository if dirty
+    #   shell: cd {{ pb_config_ng_dir }} && git reset --hard HEAD
+    #   when: git_status.stdout != ""
+    #   register: git_reset
 
     - name: Change to pb-config-ng directory and pull latest changes
       shell: cd {{ pb_config_ng_dir }} && timeout 300 git pull
