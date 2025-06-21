@@ -1,5 +1,5 @@
 ---
-- name: Redeploy Docker Compose Services
+- name: Redeploy Docker Compose Services - Prod
   hosts: ovh_master
   gather_facts: no
   become: yes
@@ -7,7 +7,7 @@
     ansible_remote_tmp: /tmp
     ansible_ssh_args: "-o ControlMaster=auto -o ControlPersist=10m"
     ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
-    manage_api_backend_dir: /home/debian/manage-api-backend
+    manage_api_backend_dir: /home/debian/manage-api-backend/prod
     global_timeout: 600 # 10 minutes in seconds
   tasks:
     - name: Change to manage-api-backend directory and stop Docker Compose services
