@@ -10,16 +10,6 @@
     manage_api_backend_dir: /home/debian/manage-api-backend/prod
     global_timeout: 600 # 10 minutes in seconds
   tasks:
-    - name: Change to manage-api-backend directory and stop Docker Compose services
-      become: yes
-      become_user: debian
-      shell: cd {{ manage_api_backend_dir }} && docker compose down
-      register: docker_down_result
-      failed_when: docker_down_result.rc != 0
-      # Add timeout to prevent hanging
-      async: "{{ global_timeout }}"
-      poll: 5
-
     - name: Pull latest Docker images
       become: yes
       become_user: debian
@@ -30,6 +20,26 @@
       async: "{{ global_timeout }}"
       poll: 5
 
+    - name: Check if there are changes in Docker images
+      set_fact:
+        has_changes: "{{ 'Image is up to date' not in docker_pull_result.stdout }}"
+
+    - name: Display no changes message
+      debug:
+        msg: "No changes detected in Docker images. Skipping restart."
+      when: not has_changes
+
+    - name: Change to manage-api-backend directory and stop Docker Compose services
+      become: yes
+      become_user: debian
+      shell: cd {{ manage_api_backend_dir }} && docker compose down
+      register: docker_down_result
+      failed_when: docker_down_result.rc != 0
+      # Add timeout to prevent hanging
+      async: "{{ global_timeout }}"
+      poll: 5
+      when: has_changes
+
     - name: Start Docker Compose services with new images
       become: yes
       become_user: debian
@@ -39,6 +49,7 @@
       # Add timeout to prevent hanging
       async: "{{ global_timeout }}"
       poll: 5
+      when: has_changes
 
     - name: Check Docker Compose services status
       become: yes
@@ -49,7 +60,9 @@
       # Add timeout to prevent hanging
       async: 30
       poll: 5
+      when: has_changes
 
     - name: Display Docker Compose services status
       debug:
         var: docker_ps_result.stdout_lines
+      when: has_changes
