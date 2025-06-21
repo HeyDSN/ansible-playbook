@@ -2,7 +2,7 @@
 - name: Update Coin List - Deni
   hosts: deni
   gather_facts: no
-  become: yes
+  become: no
   vars: 
     ansible_remote_tmp: /tmp
     ansible_ssh_args: '-o ControlMaster=auto -o ControlPersist=10m'
@@ -45,6 +45,7 @@
 
     - name: Restart Docker Compose services if changes detected
       shell: cd {{ pb_config_ng_dir }} && timeout 300 ./docker_update.sh
+      become: yes  # Only elevate privileges when needed for Docker
       when: git_result.stdout != 'Already up to date.'
       register: docker_result
       failed_when: docker_result.rc != 0
