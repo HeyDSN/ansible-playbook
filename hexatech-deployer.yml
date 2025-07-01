@@ -16,6 +16,6 @@
         mode: "0644"
 
     - name: Run deployment script with parameters
-      shell: /home/deployer/deploy.sh "{{ tmp_folder }}" "{{ service_name }}" "{{ ci_registry_image }}" "{{ ci_commit_short_sha }}" "{{ ci_pipeline_created_at }}" "{{ ci_project_namespace }}" "{{ ci_project_name }}" "{{ ci_commit_ref_name }}" "{{ ci_pipeline_url }}" "{{ ci_project_url }}" "{{ webhook_url }}" "{{ ci_image }}" "{{ exposed_port }}" "{{ internal_port }}"
+      shell: /home/deployer/deploy.sh "{{ tmp_folder }}" "{{ service_name }}" "{{ ci_registry_image }}" "{{ ci_commit_short_sha }}" "{{ ci_pipeline_created_at }}" "{{ ci_project_namespace }}" "{{ ci_project_name }}" "{{ ci_commit_ref_name }}" "{{ ci_pipeline_url }}" "{{ ci_project_url }}" "{{ webhook_url }}" "{{ exposed_port }}" "{{ internal_port }}"
       args:
         executable: /bin/bash
