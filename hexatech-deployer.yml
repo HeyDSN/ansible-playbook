@@ -1,0 +1,21 @@
+---
+- name: Deploy Application
+  hosts: hexatech_dev
+  become: no
+  tasks:
+    - name: Create temporary directory
+      file:
+        path: "{{ tmp_folder }}"
+        state: directory
+        mode: "0755"
+
+    - name: Write .env file from base64 content
+      copy:
+        content: "{{ env_file | b64decode }}"
+        dest: "{{ tmp_folder }}/.env"
+        mode: "0644"
+
+    - name: Run deployment script with parameters
+      shell: /home/deployer/deploy.sh "{{ tmp_folder }}" "{{ service_name }}" "{{ ci_registry_image }}" "{{ ci_commit_short_sha }}" "{{ ci_pipeline_created_at }}" "{{ ci_project_namespace }}" "{{ ci_project_name }}" "{{ ci_commit_ref_name }}" "{{ ci_pipeline_url }}" "{{ ci_project_url }}" "{{ webhook_url }}" "{{ ci_image }}" "{{ exposed_port }}" "{{ internal_port }}"
+      args:
+        executable: /bin/bash
