@@ -1,5 +1,5 @@
 ---
-- hosts: nginx_proxy:gitlab
+- hosts: nginx_proxy
   gather_facts: no
   become: yes
   ignore_unreachable: yes
