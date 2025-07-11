@@ -2,6 +2,7 @@
 - name: Renew Let's Encrypt certificates on multiple hosts
   hosts: all
   become: true
+  ignore_unreachable: yes
   vars:
     discord_webhook_url: "{{ lookup('env', 'ADW_CERTBOT') }}"
     certbot_log_file: "/var/log/letsencrypt/letsencrypt.log"
