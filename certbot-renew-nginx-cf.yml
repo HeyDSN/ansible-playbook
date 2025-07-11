@@ -1,6 +1,6 @@
 ---
 - name: Renew Let's Encrypt certificates on multiple hosts
-  hosts: letsencrypt_hosts
+  hosts: all
   become: true
   vars:
     discord_webhook_url: "{{ lookup('env', 'ADW_CERTBOT') }}"
