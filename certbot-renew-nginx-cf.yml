@@ -36,12 +36,11 @@
       args:
         executable: /bin/bash
       register: certbot_result
-      changed_when: "'Congratulations' in certbot_result.stdout or 'successfully renewed' in certbot_result.stdout"
+      changed_when: "'Congratulations' in certbot_result.stdout or 'successfully renewed' in certbot_result.stdout or 'Cert not due for renewal yet' in certbot_result.stdout"
 
-    - name: Print certbot log to Semaphore log
-      shell: cat "{{ certbot_temp_log }}"
-      register: full_log
-      changed_when: false
+    - name: Print certbot log to Semaphore UI
+      debug:
+        var: certbot_result.stdout_lines
 
     - name: Reload nginx if certificates were renewed
       shell: |
@@ -50,7 +49,7 @@
 
     - name: Extract renewed domains from log
       set_fact:
-        renewed_domains: "{{ (full_log.stdout_lines | select('match', '^Renewing an existing certificate for') | list | join('\n')) | default('No domains found') }}"
+        renewed_domains: "{{ (certbot_result.stdout_lines | select('match', '^Renewing an existing certificate for') | list | join('\n')) | default('No domains found') }}"
 
     - name: Send Discord webhook notification for successful renewal
       uri:
@@ -61,7 +60,7 @@
         body_format: json
         body: >
           {
-            "embeds": [{
+            "embeds": [ {
               "title": ":white_check_mark: Let's Encrypt Renewal Successful",
               "description": "Certificate was renewed successfully on `{{ inventory_hostname }}`",
               "color": 3066993,
@@ -72,11 +71,11 @@
                 },
                 {
                   "name": "Log (truncated)",
-                  "value": "{{ full_log.stdout | truncate(1800, True, '...') }}"
+                  "value": "{{ certbot_result.stdout | truncate(1800, True, '...') }}"
                 }
               ],
               "timestamp": "{{ ansible_date_time.iso8601 }}"
-            }]
+            } ]
           }
       when: "'Congratulations' in certbot_result.stdout or 'successfully renewed' in certbot_result.stdout"
 
