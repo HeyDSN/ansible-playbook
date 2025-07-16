@@ -3,12 +3,12 @@
   hosts: deni
   gather_facts: no
   become: no
-  vars: 
+  vars:
     ansible_remote_tmp: /tmp
-    ansible_ssh_args: '-o ControlMaster=auto -o ControlPersist=10m'
-    ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
-    pb_config_ng_dir: /home/ubuntu/pb-config-ng
-    global_timeout: 600  # 10 minutes in seconds
+    ansible_ssh_args: "-o ControlMaster=auto -o ControlPersist=10m"
+    ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
+    pb_config_ng_dir: /root/pb-config-ng-deni
+    global_timeout: 600
   tasks:
     - name: Check if pb-config-ng directory exists
       stat:
@@ -26,18 +26,13 @@
       changed_when: false
       failed_when: false
 
-    # - name: Reset git repository if dirty
-    #   shell: cd {{ pb_config_ng_dir }} && git reset --hard HEAD
-    #   when: git_status.stdout != ""
-    #   register: git_reset
-
     - name: Change to pb-config-ng directory and pull latest changes
       shell: cd {{ pb_config_ng_dir }} && timeout 300 git pull
       register: git_result
       changed_when: git_result.stdout != 'Already up to date.'
       failed_when: git_result.rc != 0
-      async: 360  # 6 minutes async timeout
-      poll: 10    # Check every 10 seconds
+      async: 360
+      poll: 10
 
     - name: Display git pull result
       debug:
@@ -48,8 +43,8 @@
       when: git_result.stdout != 'Already up to date.'
       register: docker_result
       failed_when: docker_result.rc != 0
-      async: 360  # 6 minutes async timeout
-      poll: 10    # Check every 10 seconds
+      async: 360
+      poll: 10
 
     - name: Display docker update result
       debug:
