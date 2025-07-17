@@ -1,6 +1,6 @@
 ---
 - name: Update Coin List - Deni
-  hosts: deni
+  hosts: orange
   gather_facts: no
   become: no
   vars:
