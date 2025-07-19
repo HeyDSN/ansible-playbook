@@ -1,6 +1,6 @@
 ---
 - name: Update Coin List - Yusup
-  hosts: yusup
+  hosts: orange
   gather_facts: no
   become: no
   vars: 
