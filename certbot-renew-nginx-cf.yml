@@ -5,8 +5,9 @@
   ignore_unreachable: yes
   vars:
     ansible_remote_tmp: /tmp
-    ansible_ssh_args: '-o ControlMaster=auto -o ControlPersist=10m'
-    ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+    ansible_ssh_args: '-o ControlMaster=auto -o ControlPersist=10m -o ConnectTimeout=30 -o ServerAliveInterval=30 -o ServerAliveCountMax=3'
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o ConnectTimeout=30'
+    ansible_timeout: 300
     discord_webhook_url: "{{ lookup('env', 'ADW_CERTBOT') }}"
     certbot_log_file: "/var/log/letsencrypt/letsencrypt.log"
     certbot_temp_log: "/tmp/certbot.log"
@@ -35,6 +36,8 @@
         executable: /bin/bash
       register: certbot_result
       changed_when: "'Congratulations' in certbot_result.stdout or 'successfully renewed' in certbot_result.stdout or 'Cert not due for renewal yet' in certbot_result.stdout"
+      async: 600
+      poll: 10
 
     - name: Print certbot log to Semaphore UI
       debug:
