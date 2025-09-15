@@ -59,25 +59,17 @@
         headers:
           Content-Type: "application/json"
         body_format: json
-        body: >
-          {
-            "embeds": [ {
-              "title": ":white_check_mark: Let's Encrypt Renewal Successful",
-              "description": "Certificate was renewed successfully on `{{ inventory_hostname }}`",
-              "color": 3066993,
-              "fields": [
-                {
-                  "name": "Renewed Domains",
-                  "value": "{{ renewed_domains }}"
-                },
-                {
-                  "name": "Log (truncated)",
-                  "value": "{{ certbot_result.stdout | truncate(1800, True, '...') }}"
-                }
-              ],
-              "timestamp": "{{ ansible_date_time.iso8601 }}"
-            } ]
-          }
+        body:
+          embeds:
+            - title: ":white_check_mark: Let's Encrypt Renewal Successful"
+              description: "Certificate was renewed successfully on `{{ inventory_hostname }}`"
+              color: 3066993
+              fields:
+                - name: "Renewed Domains"
+                  value: "{{ renewed_domains }}"
+                - name: "Log (truncated)"
+                  value: "{{ certbot_result.stdout | truncate(1800, True, '...') }}"
+              timestamp: "{{ ansible_date_time.iso8601 }}"
       when: "'Congratulations' in certbot_result.stdout or 'successfully renewed' in certbot_result.stdout"
 
     - name: Remove temporary certbot log
