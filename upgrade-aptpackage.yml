@@ -9,7 +9,13 @@
     proxmox_host: "{{ lookup('env', 'PROXMOX_HOST') }}"
     proxmox_node: "{{ lookup('env', 'PROXMOX_NODE') }}"
     proxmox_api_token: "{{ lookup('env', 'PROXMOX_API_TOKEN') }}"
-    global_timeout: 600  # 10 minutes in seconds
+    # Timeouts for different operation types
+    apt_timeout: 3600     # 1 hour for apt operations
+    cmd_timeout: 1800     # 30 minutes for command operations
+    quick_timeout: 300    # 5 minutes for quick operations
+    # Polling intervals
+    heavy_poll: 30        # 30 seconds for heavy operations
+    light_poll: 10        # 10 seconds for lighter operations
 
   pre_tasks:
     - name: Include Proxmox resource management tasks
@@ -18,26 +24,45 @@
 
     - name: Gather facts
       setup:
-      async: "{{ global_timeout }}"
-      poll: 5
+      async: "{{ quick_timeout }}"
+      poll: "{{ light_poll }}"
 
     - name: Include pre-requisite tasks
       include_tasks: _prereq_tasks.yml
 
   tasks:
+    - name: Kill any stuck apt processes
+      shell: |
+        pkill -f apt-get || true
+        pkill -f dpkg || true
+        # Remove any lock files if they exist
+        rm -f /var/lib/dpkg/lock-frontend || true
+        rm -f /var/lib/dpkg/lock || true
+        rm -f /var/cache/apt/archives/lock || true
+        # Fix any interrupted dpkg operations
+        dpkg --configure -a || true
+      ignore_errors: yes
+      changed_when: false
+
     - name: Update apt cache
       apt:
         update_cache: yes
       register: apt_update_result
-      async: "{{ global_timeout }}"
-      poll: 5
+      async: "{{ apt_timeout }}"
+      poll: "{{ heavy_poll }}"
+      retries: 3
+      delay: 60
+      until: apt_update_result is succeeded
 
     - name: Get upgradable packages (dry-run)
       command: apt-get -s upgrade
       register: upgrade_dry_run
       changed_when: false
-      async: "{{ global_timeout }}"
-      poll: 5
+      async: "{{ cmd_timeout }}"
+      poll: "{{ light_poll }}"
+      retries: 2
+      delay: 30
+      until: upgrade_dry_run is succeeded
 
     - name: Parse upgradable packages
       set_fact:
@@ -47,22 +72,25 @@
       shell: apt-mark showhold
       register: manually_held_packages
       changed_when: false
-      async: "{{ global_timeout }}"
-      poll: 5
+      async: "{{ quick_timeout }}"
+      poll: "{{ light_poll }}"
 
     - name: Get list of all upgradable packages
       shell: apt list --upgradable 2>/dev/null | grep -v '^Listing...' | cut -d'/' -f1
       register: all_upgradable_packages
       changed_when: false
-      async: "{{ global_timeout }}"
-      poll: 5
+      async: "{{ cmd_timeout }}"
+      poll: "{{ light_poll }}"
 
     - name: Get list of packages that would be upgraded
       shell: apt-get --simulate dist-upgrade | grep '^Inst' | awk '{print $2}'
       register: would_be_upgraded
       changed_when: false
-      async: "{{ global_timeout }}"
-      poll: 5
+      async: "{{ cmd_timeout }}"
+      poll: "{{ light_poll }}"
+      retries: 2
+      delay: 30
+      until: would_be_upgraded is succeeded
 
     - name: Identify system-held packages
       set_fact:
@@ -71,17 +99,28 @@
     - name: Perform apt upgrade
       apt:
         upgrade: yes
+        force_apt_get: yes
+        dpkg_options: 'force-confdef,force-confold'
       register: apt_upgrade_result
       when: upgradable_packages | length > 0
-      async: "{{ global_timeout }}"
-      poll: 5
+      async: "{{ apt_timeout }}"
+      poll: "{{ heavy_poll }}"
+      retries: 2
+      delay: 120
+      until: apt_upgrade_result is succeeded
+
+    - name: Fix any broken packages after upgrade
+      shell: apt-get -f install -y
+      register: fix_broken_result
+      when: apt_upgrade_result is defined and apt_upgrade_result is failed
+      ignore_errors: yes
 
     - name: Perform apt autoremove (dry-run)
       command: apt-get --dry-run autoremove
       register: autoremove_dry_run
       changed_when: false
-      async: "{{ global_timeout }}"
-      poll: 5
+      async: "{{ cmd_timeout }}"
+      poll: "{{ light_poll }}"
 
     - name: Parse autoremovable packages
       set_fact:
@@ -90,31 +129,32 @@
     - name: Perform apt autoremove
       apt:
         autoremove: yes
+        force_apt_get: yes
       register: apt_autoremove_result
       when: autoremovable_packages | length > 0
-      async: "{{ global_timeout }}"
-      poll: 5
+      async: "{{ apt_timeout }}"
+      poll: "{{ heavy_poll }}"
+      retries: 2
+      delay: 60
+      until: apt_autoremove_result is succeeded
 
     - name: Perform apt autoclean
       apt:
         autoclean: yes
+        force_apt_get: yes
       register: apt_autoclean_result
-      async: "{{ global_timeout }}"
-      poll: 5
+      async: "{{ cmd_timeout }}"
+      poll: "{{ light_poll }}"
 
     - name: Check if reboot is required
       stat:
         path: /var/run/reboot-required
       register: reboot_required_file
-      async: "{{ global_timeout }}"
-      poll: 5
 
     - name: Get disk space in package cache
       shell: du -sh /var/cache/apt/archives
       register: disk_space_cache
       changed_when: false
-      async: "{{ global_timeout }}"
-      poll: 5
 
     - name: Set notification flag
       set_fact:
@@ -198,9 +238,12 @@
         body_format: json
         body: "{{ discord_message }}"
         status_code: [204, 200]  # Accept both 204 and 200 as success
+        timeout: 30
       when: should_notify and lookup('env', 'ADW_UPDATE') | length > 0
-      async: "{{ global_timeout }}"
-      poll: 5
+      retries: 3
+      delay: 10
+      until: result is succeeded
+      register: result
 
     - name: Display upgrade report (Debug)
       debug:
