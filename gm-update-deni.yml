@@ -5,15 +5,34 @@
   become: no
   vars:
     ansible_remote_tmp: /tmp
-    ansible_ssh_args: "-o ControlMaster=auto -o ControlPersist=10m"
-    ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
+    ansible_ssh_args: "-o ControlMaster=auto -o ControlPersist=10m -o ConnectTimeout=30 -o ServerAliveInterval=60 -o ServerAliveCountMax=3"
+    ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o BatchMode=yes"
     pb_config_ng_dir: /root/pb-config-ng-deni
     global_timeout: 600
+    connection_timeout: 30
+    command_timeout: 300
   tasks:
+    - name: Test SSH connectivity
+      wait_for_connection:
+        timeout: "{{ connection_timeout }}"
+      retries: 3
+      delay: 5
+      register: connection_test
+      failed_when: false
+
+    - name: Fail if SSH connection failed
+      fail:
+        msg: "Failed to establish SSH connection to {{ inventory_hostname }}"
+      when: connection_test is failed
+
     - name: Check if pb-config-ng directory exists
       stat:
         path: "{{ pb_config_ng_dir }}"
       register: dir_check
+      async: "{{ connection_timeout }}"
+      poll: 5
+      retries: 2
+      delay: 3
 
     - name: Fail if directory doesn't exist
       fail:
@@ -21,30 +40,39 @@
       when: not dir_check.stat.exists
 
     - name: Check git repository status
-      shell: cd {{ pb_config_ng_dir }} && git status --porcelain
+      shell: cd {{ pb_config_ng_dir }} && timeout {{ command_timeout }} git status --porcelain
       register: git_status
       changed_when: false
       failed_when: false
+      async: "{{ command_timeout + 60 }}"
+      poll: 10
+      retries: 2
+      delay: 5
 
     - name: Change to pb-config-ng directory and pull latest changes
-      shell: cd {{ pb_config_ng_dir }} && timeout 300 git pull
+      shell: cd {{ pb_config_ng_dir }} && timeout {{ command_timeout }} git pull
       register: git_result
       changed_when: git_result.stdout != 'Already up to date.'
       failed_when: git_result.rc != 0
-      async: 360
+      async: "{{ command_timeout + 60 }}"
       poll: 10
+      retries: 2
+      delay: 5
+      until: git_result.rc == 0 or 'Already up to date' in git_result.stdout
 
     - name: Display git pull result
       debug:
         msg: "Git pull output: {{ git_result.stdout }}"
 
     - name: Restart Docker Compose services if changes detected
-      shell: cd {{ pb_config_ng_dir }} && timeout 300 ./docker_update.sh
+      shell: cd {{ pb_config_ng_dir }} && timeout {{ command_timeout }} ./docker_update.sh
       when: git_result.stdout != 'Already up to date.'
       register: docker_result
       failed_when: docker_result.rc != 0
-      async: 360
-      poll: 10
+      async: "{{ command_timeout + 60 }}"
+      poll: 15
+      retries: 1
+      delay: 10
 
     - name: Display docker update result
       debug:
