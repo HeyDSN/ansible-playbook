@@ -3,11 +3,18 @@
   hosts: all
   become: true
   ignore_unreachable: yes
+
   vars:
     ansible_remote_tmp: /tmp
-    ansible_ssh_args: '-o ControlMaster=auto -o ControlPersist=10m -o ConnectTimeout=30 -o ServerAliveInterval=30 -o ServerAliveCountMax=3'
-    ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o ConnectTimeout=30'
+    ansible_ssh_args: >-
+      -o ControlMaster=auto
+      -o ControlPersist=10m
+      -o ConnectTimeout=30
+      -o ServerAliveInterval=30
+      -o ServerAliveCountMax=3
+    ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o ConnectTimeout=30"
     ansible_timeout: 300
+
     discord_webhook_url: "{{ lookup('env', 'ADW_CERTBOT') }}"
     certbot_log_file: "/var/log/letsencrypt/letsencrypt.log"
     certbot_temp_log: "/tmp/certbot.log"
@@ -35,9 +42,11 @@
       args:
         executable: /bin/bash
       register: certbot_result
-      changed_when: "'Congratulations' in certbot_result.stdout or 'successfully renewed' in certbot_result.stdout or 'Cert not due for renewal yet' in certbot_result.stdout"
       async: 600
       poll: 10
+      changed_when: >
+        'Congratulations' in certbot_result.stdout or
+        'successfully renewed' in certbot_result.stdout
 
     - name: Print certbot log to Semaphore UI
       debug:
@@ -45,12 +54,20 @@
 
     - name: Reload nginx if certificates were renewed
       shell: |
-        nginx -t && nginx -s reload && systemctl start nginx
-      when: "'Congratulations' in certbot_result.stdout or 'successfully renewed' in certbot_result.stdout"
+        nginx -t && nginx -s reload
+      when: >
+        'Congratulations' in certbot_result.stdout or
+        'successfully renewed' in certbot_result.stdout
 
-    - name: Extract renewed domains from log
+    - name: Extract renewed domains from certbot output
       set_fact:
-        renewed_domains: "{{ (certbot_result.stdout_lines | select('match', '^Renewing an existing certificate for') | list | join('\n')) | default('No domains found') }}"
+        renewed_domains: >-
+          {{
+            certbot_result.stdout_lines
+            | select('search', '^Renewing an existing certificate for')
+            | map('regex_replace', '^Renewing an existing certificate for ', '')
+            | list
+          }}
 
     - name: Send Discord webhook notification for successful renewal
       uri:
@@ -61,16 +78,23 @@
         body_format: json
         body:
           embeds:
-            - title: ":white_check_mark: Let's Encrypt Renewal Successful"
-              description: "Certificate was renewed successfully on `{{ inventory_hostname }}`"
+            - title: "✅ Let's Encrypt Renewal Successful"
+              description: "Certificates renewed on `{{ inventory_hostname }}`"
               color: 3066993
               fields:
                 - name: "Renewed Domains"
-                  value: "{{ renewed_domains }}"
-                - name: "Log (truncated)"
-                  value: "{{ certbot_result.stdout | truncate(1800, True, '...') }}"
+                  value: "{{ renewed_domains | join('\n') }}"
+                - name: "Renewal Summary"
+                  value: >-
+                    {{
+                      certbot_result.stdout_lines
+                      | select('search', 'Congratulations|successfully renewed|Renewing an existing certificate')
+                      | list
+                      | join('\n')
+                      | truncate(900, True, '...')
+                    }}
               timestamp: "{{ ansible_date_time.iso8601 }}"
-      when: "'Congratulations' in certbot_result.stdout or 'successfully renewed' in certbot_result.stdout"
+      when: renewed_domains | length > 0
 
     - name: Remove temporary certbot log
       file:
