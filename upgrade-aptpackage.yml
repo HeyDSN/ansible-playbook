@@ -5,8 +5,8 @@
 
   vars:
     ansible_remote_tmp: /tmp
-    # ansible_ssh_args: '-o ControlMaster=auto -o ControlPersist=10m'
-    # ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+    ansible_ssh_args: '-vvv -o ControlMaster=auto -o ControlPersist=10m'
+    ansible_ssh_common_args: '-vvv -o StrictHostKeyChecking=no'
 
     proxmox_host: "{{ lookup('env', 'PROXMOX_HOST') }}"
     proxmox_node: "{{ lookup('env', 'PROXMOX_NODE') }}"
