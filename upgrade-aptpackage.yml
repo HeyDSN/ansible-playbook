@@ -1,6 +1,6 @@
 ---
 - hosts: all
-  gather_facts: true
+  gather_facts: false
   become: true
 
   vars:
@@ -20,10 +20,18 @@
     heavy_poll: 30        # 30 seconds for heavy operations
     light_poll: 10        # 10 seconds for lighter operations
 
+    # Async timeout settings
+    ansible_timeout: 600
+    async_timeout: 3600
+    async_poll_interval: 30
+
   pre_tasks:
     - name: Include Proxmox resource management tasks
       include_tasks: _proxmox-vm-management.yml
       when: "'proxmox_vm_id' in hostvars[inventory_hostname]"
+
+    - name: Gather facts
+      setup:
 
     - name: Include pre-requisite tasks
       include_tasks: _prereq_tasks.yml
@@ -34,32 +42,26 @@
           embeds: []
 
   tasks:
-    - name: Kill any stuck apt processes
+    - name: Kill stuck apt/dpkg processes
       shell: |
-        pkill -f apt-get || true
-        pkill -f dpkg || true
-        # Remove any lock files if they exist
-        rm -f /var/lib/dpkg/lock-frontend || true
-        rm -f /var/lib/dpkg/lock || true
-        rm -f /var/cache/apt/archives/lock || true
-        # Fix any interrupted dpkg operations
-        dpkg --configure -a || true
-      ignore_errors: true
+        pkill -9 -f "apt-get" || true
+        pkill -9 -f "dpkg" || true
+        rm -f /var/lib/dpkg/lock-frontend 2>/dev/null || true
+        rm -f /var/lib/dpkg/lock 2>/dev/null || true
+        rm -f /var/cache/apt/archives/lock 2>/dev/null || true
+        dpkg --configure -a 2>/dev/null || true
+      ignore_errors: yes
       changed_when: false
 
     - name: Update apt cache
       apt:
         update_cache: yes
       register: apt_update_result
-      async: "{{ apt_timeout }}"
-      poll: "{{ heavy_poll }}"
 
     - name: Get upgradable packages (dry-run)
       command: apt-get -s upgrade
       register: upgrade_dry_run
       changed_when: false
-      async: "{{ cmd_timeout }}"
-      poll: "{{ light_poll }}"
 
     - name: Parse upgradable packages
       set_fact:
@@ -69,22 +71,16 @@
       shell: apt-mark showhold
       register: manually_held_packages
       changed_when: false
-      async: "{{ quick_timeout }}"
-      poll: "{{ light_poll }}"
 
     - name: Get list of all upgradable packages
       shell: apt list --upgradable 2>/dev/null | grep -v '^Listing...' | cut -d'/' -f1
       register: all_upgradable_packages
       changed_when: false
-      async: "{{ cmd_timeout }}"
-      poll: "{{ light_poll }}"
 
     - name: Get list of packages that would be upgraded
       shell: apt-get --simulate dist-upgrade | grep '^Inst' | awk '{print $2}'
       register: would_be_upgraded
       changed_when: false
-      async: "{{ cmd_timeout }}"
-      poll: "{{ light_poll }}"
 
     - name: Identify system-held packages
       set_fact:
@@ -97,8 +93,6 @@
         dpkg_options: 'force-confdef,force-confold'
       register: apt_upgrade_result
       when: upgradable_packages | length > 0
-      async: "{{ apt_timeout }}"
-      poll: "{{ heavy_poll }}"
 
     - name: Fix any broken packages after upgrade
       shell: apt-get -f install -y

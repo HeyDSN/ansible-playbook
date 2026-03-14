@@ -25,17 +25,39 @@
         project_src: "{{ compose_dir }}"
         pull: always
         state: present
-      register: compose_result
+      register: compose_pull_job
       async: "{{ global_timeout }}"
-      poll: 5
+      poll: 15
+
+    - name: Verify docker compose pull completed
+      async_status:
+        jid: "{{ compose_pull_job.ansible_job_id }}"
+      register: compose_result
+      until: compose_result.finished | bool
+      retries: 40
+      delay: 15
+      failed_when: compose_result.failed | bool
+      when: compose_pull_job.ansible_job_id is defined
 
     - name: Check if any containers were updated
       set_fact:
-        containers_updated: "{{ compose_result.changed }}"
+        containers_updated: "{{ compose_pull_job.changed }}"
+      when: compose_pull_job is defined
 
     - name: Prune unused images
       community.docker.docker_prune:
         images: yes
+      register: prune_job
       when: containers_updated
       async: "{{ global_timeout }}"
-      poll: 5
+      poll: 15
+
+    - name: Verify docker prune completed
+      async_status:
+        jid: "{{ prune_job.ansible_job_id }}"
+      register: prune_result
+      until: prune_result.finished | bool
+      retries: 20
+      delay: 15
+      failed_when: prune_result.failed | bool
+      when: containers_updated and prune_job.ansible_job_id is defined

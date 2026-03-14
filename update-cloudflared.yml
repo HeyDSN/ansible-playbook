@@ -14,7 +14,7 @@
 
   pre_tasks:
     - name: Check host connectivity
-      include_tasks: 
+      include_tasks:
         file: _host-connectivity-check.yml
         apply:
           vars:
@@ -35,8 +35,6 @@
       register: cloudflared_check
       ignore_errors: yes
       changed_when: false
-      async: "{{ global_timeout }}"
-      poll: 5
 
     - name: Get installed Cloudflared version
       command: cloudflared --version
@@ -44,8 +42,6 @@
       changed_when: false
       failed_when: false
       when: cloudflared_check.rc == 0
-      async: "{{ global_timeout }}"
-      poll: 5
 
     - name: Get latest Cloudflared version
       uri:
@@ -53,8 +49,6 @@
         return_content: yes
       register: latest_release
       when: cloudflared_check.rc == 0
-      async: "{{ global_timeout }}"
-      poll: 5
 
     - name: Set latest version fact
       set_fact:
@@ -69,24 +63,56 @@
     - name: Download latest Cloudflared deb package
       command: "curl -L --output {{ temp_deb_path }} {{ cloudflared_deb_url }}"
       when: cloudflared_check.rc == 0 and update_needed
+      register: download_job
       async: "{{ global_timeout }}"
       poll: 5
+
+    - name: Verify download completion
+      async_status:
+        jid: "{{ download_job.ansible_job_id }}"
+      register: download_result
+      when: cloudflared_check.rc == 0 and update_needed
+      until: download_result.finished | bool
+      retries: 40
+      delay: 15
+      failed_when: download_result.failed | bool
 
     - name: Install Cloudflared deb package
       apt:
         deb: "{{ temp_deb_path }}"
       when: cloudflared_check.rc == 0 and update_needed
-      register: cloudflared_updated
+      register: install_job
       async: "{{ global_timeout }}"
       poll: 5
+
+    - name: Verify install completion
+      async_status:
+        jid: "{{ install_job.ansible_job_id }}"
+      register: install_result
+      when: cloudflared_check.rc == 0 and update_needed
+      until: install_result.finished | bool
+      retries: 40
+      delay: 15
+      failed_when: install_result.failed | bool
 
     - name: Restart Cloudflared service
       systemd:
         name: cloudflared.service
         state: restarted
-      when: cloudflared_updated.changed
+      when: install_result.changed
+      register: restart_job
       async: "{{ global_timeout }}"
       poll: 5
+
+    - name: Verify restart completion
+      async_status:
+        jid: "{{ restart_job.ansible_job_id }}"
+      register: restart_result
+      when: install_result.changed
+      until: restart_result.finished | bool
+      retries: 20
+      delay: 15
+      failed_when: restart_result.failed | bool
 
     - name: Clean up temporary deb file
       file:
@@ -118,7 +144,7 @@
                 - New version: {{ latest_version }}
               footer:
                 text: "Report generated on {{ ansible_date_time.iso8601 }}"
-      when: cloudflared_updated.changed
+      when: install_result.changed
 
     - name: Send Discord notification
       uri:
@@ -127,13 +153,13 @@
         body_format: json
         body: "{{ discord_message }}"
         status_code: [204, 200]  # Accept both 204 and 200 as success
-      when: 
+      when:
         - lookup('env', 'ADW_UPDATE') | length > 0
-        - cloudflared_updated.changed
+        - install_result.changed
       async: "{{ global_timeout }}"
       poll: 5
 
     - name: Display update report (Debug)
       debug:
         msg: "Cloudflared on {{ inventory_hostname }} has been updated to version {{ latest_version }}"
-      when: cloudflared_updated.changed
+      when: install_result.changed

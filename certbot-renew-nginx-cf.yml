@@ -31,7 +31,7 @@
         path: "{{ certbot_log_file }}"
         state: absent
 
-    - name: Renew Let's Encrypt certificates (with retries and full logging)
+    - name: Renew Let's Encrypt certificates
       shell: |
         set -o pipefail
         for i in {1..3}; do
@@ -41,12 +41,22 @@
         done
       args:
         executable: /bin/bash
-      register: certbot_result
-      async: 600
-      poll: 10
+      register: certbot_job
+      async: 900
+      poll: 15
       changed_when: >
         'Congratulations' in certbot_result.stdout or
         'successfully renewed' in certbot_result.stdout
+
+    - name: Verify certbot renewal completed
+      async_status:
+        jid: "{{ certbot_job.ansible_job_id }}"
+      register: certbot_result
+      until: certbot_result.finished | bool
+      retries: 60
+      delay: 15
+      failed_when: certbot_result.failed | bool
+      when: certbot_job.ansible_job_id is defined
 
     - name: Print certbot log to Semaphore UI
       debug:
@@ -78,7 +88,7 @@
         body_format: json
         body:
           embeds:
-            - title: "✅ Let's Encrypt Renewal Successful"
+            - title: "Let's Encrypt Renewal Successful"
               description: "Certificates renewed on `{{ inventory_hostname }}`"
               color: 3066993
               fields:

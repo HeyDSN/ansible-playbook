@@ -14,7 +14,7 @@
 
   pre_tasks:
     - name: Check host connectivity
-      include_tasks: 
+      include_tasks:
         file: _host-connectivity-check.yml
         apply:
           vars:
@@ -30,30 +30,34 @@
         - name: Check for updates
           apt:
             update_cache: yes
-          register: apt_update_result
+          register: apt_update_job
           async: "{{ global_timeout }}"
-          poll: 5
+          poll: 10
+
+        - name: Verify apt update completed
+          async_status:
+            jid: "{{ apt_update_job.ansible_job_id }}"
+          register: apt_update_result
+          until: apt_update_result.finished | bool
+          retries: 60
+          delay: 10
+          failed_when: apt_update_result.failed | bool
+          when: apt_update_job.ansible_job_id is defined
 
         - name: Get list of manually held packages
           shell: apt-mark showhold
           register: manually_held_packages
           changed_when: false
-          async: "{{ global_timeout }}"
-          poll: 5
 
         - name: Get list of all upgradable packages
           shell: apt list --upgradable 2>/dev/null | grep -v '^Listing...' | cut -d'/' -f1
           register: all_upgradable_packages
           changed_when: false
-          async: "{{ global_timeout }}"
-          poll: 5
 
         - name: Get list of packages that would be upgraded
           shell: apt-get --simulate dist-upgrade | grep '^Inst' | awk '{print $2}'
           register: would_be_upgraded
           changed_when: false
-          async: "{{ global_timeout }}"
-          poll: 5
 
         - name: Identify system-held packages
           set_fact:
@@ -69,8 +73,6 @@
             done
           register: upgradable_packages_details
           changed_when: false
-          async: "{{ global_timeout }}"
-          poll: 5
 
         - name: Set update flags
           set_fact:
@@ -126,7 +128,7 @@
             body_format: json
             body: "{{ discord_message }}"
             status_code: [204, 200]  # Accept both 204 and 200 as success
-          when: 
+          when:
             - updates_available
             - update_required_webhook | length > 0
           async: "{{ global_timeout }}"
@@ -139,7 +141,7 @@
             body_format: json
             body: "{{ discord_message }}"
             status_code: [204, 200]  # Accept both 204 and 200 as success
-          when: 
+          when:
             - not updates_available
             - held_updates_available
             - update_held_webhook | length > 0
