@@ -44,11 +44,10 @@
   tasks:
     - name: Kill stuck apt/dpkg processes
       shell: |
-        pkill -9 -f "apt-get" || true
-        pkill -9 -f "dpkg" || true
-        rm -f /var/lib/dpkg/lock-frontend 2>/dev/null || true
-        rm -f /var/lib/dpkg/lock 2>/dev/null || true
-        rm -f /var/cache/apt/archives/lock 2>/dev/null || true
+        pkill -9 apt-get 2>/dev/null || true
+        pkill -9 dpkg 2>/dev/null || true
+        sleep 1
+        rm -f /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/cache/apt/archives/lock 2>/dev/null || true
         dpkg --configure -a 2>/dev/null || true
       ignore_errors: yes
       changed_when: false
@@ -218,6 +217,7 @@
         body: "{{ discord_message }}"
         status_code: [200, 204] # Accept both 200 and 204 as success
         timeout: 30
+      throttle: 1
       when:
         - should_notify
         - discord_message.embeds | length > 0

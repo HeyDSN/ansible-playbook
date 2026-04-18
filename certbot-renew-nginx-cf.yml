@@ -45,8 +45,8 @@
       async: 900
       poll: 15
       changed_when: >
-        'Congratulations' in certbot_result.stdout or
-        'successfully renewed' in certbot_result.stdout
+        'Congratulations' in certbot_job.stdout or
+        'successfully renewed' in certbot_job.stdout
 
     - name: Verify certbot renewal completed
       async_status:

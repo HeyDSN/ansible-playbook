@@ -63,64 +63,24 @@
     - name: Download latest Cloudflared deb package
       command: "curl -L --output {{ temp_deb_path }} {{ cloudflared_deb_url }}"
       when: cloudflared_check.rc == 0 and update_needed
-      register: download_job
-      async: "{{ global_timeout }}"
-      poll: 5
-
-    - name: Verify download completion
-      async_status:
-        jid: "{{ download_job.ansible_job_id }}"
-      register: download_result
-      when: cloudflared_check.rc == 0 and update_needed
-      until: download_result.finished | bool
-      retries: 40
-      delay: 15
-      failed_when: download_result.failed | bool
 
     - name: Install Cloudflared deb package
       apt:
         deb: "{{ temp_deb_path }}"
       when: cloudflared_check.rc == 0 and update_needed
-      register: install_job
-      async: "{{ global_timeout }}"
-      poll: 5
-
-    - name: Verify install completion
-      async_status:
-        jid: "{{ install_job.ansible_job_id }}"
       register: install_result
-      when: cloudflared_check.rc == 0 and update_needed
-      until: install_result.finished | bool
-      retries: 40
-      delay: 15
-      failed_when: install_result.failed | bool
 
     - name: Restart Cloudflared service
       systemd:
         name: cloudflared.service
         state: restarted
       when: install_result.changed
-      register: restart_job
-      async: "{{ global_timeout }}"
-      poll: 5
-
-    - name: Verify restart completion
-      async_status:
-        jid: "{{ restart_job.ansible_job_id }}"
-      register: restart_result
-      when: install_result.changed
-      until: restart_result.finished | bool
-      retries: 20
-      delay: 15
-      failed_when: restart_result.failed | bool
 
     - name: Clean up temporary deb file
       file:
         path: "{{ temp_deb_path }}"
         state: absent
       when: cloudflared_check.rc == 0 and update_needed
-      async: "{{ global_timeout }}"
-      poll: 5
 
     - name: Prepare Discord notification message
       set_fact:
@@ -156,8 +116,6 @@
       when:
         - lookup('env', 'ADW_UPDATE') | length > 0
         - install_result.changed
-      async: "{{ global_timeout }}"
-      poll: 5
 
     - name: Display update report (Debug)
       debug:
