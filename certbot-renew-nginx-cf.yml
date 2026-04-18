@@ -41,22 +41,10 @@
         done
       args:
         executable: /bin/bash
-      register: certbot_job
-      async: 900
-      poll: 15
-      changed_when: >
-        'Congratulations' in certbot_job.stdout or
-        'successfully renewed' in certbot_job.stdout
-
-    - name: Verify certbot renewal completed
-      async_status:
-        jid: "{{ certbot_job.ansible_job_id }}"
       register: certbot_result
-      until: certbot_result.finished | bool
-      retries: 60
-      delay: 15
-      failed_when: certbot_result.failed | bool
-      when: certbot_job.ansible_job_id is defined
+      changed_when: >
+        'Congratulations' in certbot_result.stdout or
+        'successfully renewed' in certbot_result.stdout
 
     - name: Print certbot log to Semaphore UI
       debug:
