@@ -64,8 +64,22 @@
             certbot_result.stdout_lines
             | select('search', '^Renewing an existing certificate for')
             | map('regex_replace', '^Renewing an existing certificate for ', '')
+            | map('regex_replace', ' and ([0-9]+) more$', ' (+\\1 more domains)')
             | list
           }}
+
+    - name: Prepare Discord renewal details
+      set_fact:
+        renewed_domains_text: "{{ renewed_domains | join(\"\n\") }}"
+        renewal_summary_text: >-
+          {{
+            certbot_result.stdout_lines
+            | select('search', 'Congratulations|successfully renewed|Renewing an existing certificate')
+            | list
+            | join("\n")
+            | truncate(900, True, '...')
+          }}
+      when: renewed_domains | length > 0
 
     - name: Send Discord webhook notification for successful renewal
       uri:
@@ -81,16 +95,9 @@
               color: 3066993
               fields:
                 - name: "Renewed Domains"
-                  value: "{{ renewed_domains | join('\n') }}"
+                  value: "{{ renewed_domains_text }}"
                 - name: "Renewal Summary"
-                  value: >-
-                    {{
-                      certbot_result.stdout_lines
-                      | select('search', 'Congratulations|successfully renewed|Renewing an existing certificate')
-                      | list
-                      | join('\n')
-                      | truncate(900, True, '...')
-                    }}
+                  value: "{{ renewal_summary_text }}"
               timestamp: "{{ ansible_date_time.iso8601 }}"
       when: renewed_domains | length > 0
 

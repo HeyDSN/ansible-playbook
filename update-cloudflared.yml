@@ -43,6 +43,11 @@
       failed_when: false
       when: cloudflared_check.rc == 0
 
+    - name: Set installed version fact
+      set_fact:
+        installed_cloudflared_version: "{{ installed_version.stdout | default('') | regex_search('[0-9]+\\.[0-9]+\\.[0-9]+') | default('unknown', true) }}"
+      when: cloudflared_check.rc == 0
+
     - name: Get latest Cloudflared version
       uri:
         url: "https://api.github.com/repos/cloudflare/cloudflared/releases/latest"
@@ -52,12 +57,12 @@
 
     - name: Set latest version fact
       set_fact:
-        latest_version: "{{ latest_release.json.tag_name }}"
+        latest_version: "{{ latest_release.json.tag_name | regex_replace('^v', '') }}"
       when: cloudflared_check.rc == 0
 
     - name: Compare versions
       set_fact:
-        update_needed: "{{ installed_version.stdout is not defined or installed_version.stdout.split()[1] != latest_version }}"
+        update_needed: "{{ installed_cloudflared_version == 'unknown' or installed_cloudflared_version != latest_version }}"
       when: cloudflared_check.rc == 0
 
     - name: Download latest Cloudflared deb package
@@ -100,7 +105,7 @@
                   inline: true
               description: |-
                 Cloudflared has been updated to the latest version.
-                - Old version: {{ installed_version.stdout.split()[1] }}
+                - Old version: {{ installed_cloudflared_version }}
                 - New version: {{ latest_version }}
               footer:
                 text: "Report generated on {{ ansible_date_time.iso8601 }}"
