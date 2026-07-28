@@ -6,19 +6,32 @@
     ansible_remote_tmp: /tmp
     ansible_ssh_args: '-o ControlMaster=auto -o ControlPersist=10m'
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
-    compose_dir: /home/ubuntu/dozzle
+    compose_dirs:
+      - /home/ubuntu/dozzle
+      - /root/dozzle
     global_timeout: 600  # 10 minutes in seconds
 
   tasks:
-    - name: Check if docker-compose file exists
+    - name: Check for docker-compose.yml in supported locations
       stat:
-        path: "{{ compose_dir }}/docker-compose.yml"
-      register: compose_file
+        path: "{{ item }}/docker-compose.yml"
+      loop: "{{ compose_dirs }}"
+      register: compose_files
+
+    - name: Select the first available Docker Compose directory
+      set_fact:
+        compose_dir: >-
+          {{ compose_files.results
+             | selectattr('stat.exists')
+             | map(attribute='item')
+             | list
+             | first
+             | default('') }}
 
     - name: Fail if docker-compose.yml doesn't exist
       fail:
-        msg: "docker-compose.yml not found in {{ compose_dir }}"
-      when: not compose_file.stat.exists
+        msg: "docker-compose.yml not found in any supported location: {{ compose_dirs | join(', ') }}"
+      when: compose_dir | length == 0
 
     - name: Pull latest images and check for updates
       community.docker.docker_compose_v2:
