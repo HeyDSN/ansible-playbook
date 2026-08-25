@@ -68,9 +68,9 @@
       set_fact:
         disks_over_threshold: >-
           {{ disks_over_threshold + [{
-            'device': item | regex_replace('^([^|]+)\\|[0-9]+\\|.*$', '\\1'),
-            'usage': item | regex_replace('^[^|]+\\|([0-9]+)\\|.*$', '\\1') | int,
-            'mount': item | regex_replace('^[^|]+\\|[0-9]+\\|(.*)$', '\\1')
+            'device': item.split('|', 2)[0],
+            'usage': item.split('|', 2)[1] | int,
+            'mount': item.split('|', 2)[2]
           }] }}
       loop: "{{ disk_usage.stdout_lines | default([]) }}"
       when:
