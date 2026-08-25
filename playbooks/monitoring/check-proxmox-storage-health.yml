@@ -1,0 +1,90 @@
+---
+- name: Check Proxmox host storage health
+  hosts: all
+  gather_facts: false
+  become: true
+  ignore_unreachable: true
+
+  vars_files:
+    - ../../shared/vars/connection-defaults.yml
+  vars:
+    playbook_name: "check-proxmox-storage-health.yml"
+    notification_webhook: "{{ lookup('env', 'ADW_NOTIF') }}"
+
+  pre_tasks:
+    - name: Check host connectivity
+      include_tasks:
+        file: ../../shared/tasks/host-connectivity.yml
+        apply:
+          vars:
+            task_name: "Pre-check for Proxmox storage health"
+
+  tasks:
+    - name: Collect storage health alerts without changing the host
+      raw: |
+        if command -v zpool >/dev/null 2>&1; then
+          zpool list -H -o name,health 2>/dev/null | while read -r pool health; do
+            if [ "$health" != "ONLINE" ]; then
+              printf 'ZFS|Pool %s is %s\n' "$pool" "$health"
+            fi
+          done
+        fi
+
+        if grep -Eq '^md[0-9]+.*\[[^]]*_' /proc/mdstat 2>/dev/null; then
+          grep -E '^md[0-9]+' /proc/mdstat | while read -r line; do
+            case "$line" in
+              *'_'*) printf 'MDRAID|%s\n' "$line" ;;
+            esac
+          done
+        fi
+
+        if command -v smartctl >/dev/null 2>&1; then
+          smartctl --scan-open 2>/dev/null | awk '{print $1}' | while read -r device; do
+            [ -n "$device" ] || continue
+            smart_health=$(smartctl -H "$device" 2>&1 || true)
+            if printf '%s' "$smart_health" | grep -Eqi 'overall-health.*FAILED|SMART Health Status:.*FAIL'; then
+              printf 'SMART|%s reports failed health status\n' "$device"
+            fi
+          done
+        fi
+      register: storage_health_check
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Initialize storage alerts
+      set_fact:
+        storage_alerts: []
+
+    - name: Record unhealthy storage checks
+      set_fact:
+        storage_alerts: >-
+          {{ storage_alerts + [{
+            'type': item.split('|', 1)[0],
+            'detail': item.split('|', 1)[1]
+          }] }}
+      loop: "{{ storage_health_check.stdout_lines | default([]) }}"
+      when: item is match('^[^|]+\\|.+$')
+
+    - name: Send Proxmox storage health alert
+      uri:
+        url: "{{ notification_webhook }}"
+        method: POST
+        body_format: json
+        body:
+          embeds:
+            - title: "⚠️ Proxmox Storage Health Alert: {{ inventory_hostname }}"
+              color: 15158332
+              description: |-
+                {% for alert in storage_alerts %}
+                **{{ alert.type }}:** {{ alert.detail }}
+                {% endfor %}
+              footer:
+                text: "Report generated on {{ lookup('pipe', 'date -u +\"%Y-%m-%dT%H:%M:%SZ\"') }}"
+        status_code: [200, 204]
+        timeout: 30
+      delegate_to: localhost
+      become: false
+      when:
+        - storage_alerts | length > 0
+        - notification_webhook | length > 0

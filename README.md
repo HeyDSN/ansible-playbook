@@ -24,6 +24,7 @@ Archive/        # playbooks retired; tidak dipakai
 | Cloudflared update | `playbooks/maintenance/update-cloudflared.yml` |
 | Dozzle update | `playbooks/maintenance/update-dozzle.yml` |
 | Let's Encrypt renewal | `playbooks/maintenance/renew-certificates.yml` |
+| Proxmox storage health | `playbooks/monitoring/check-proxmox-storage-health.yml` |
 | Hexatech deployment | `playbooks/deploy/deploy-hexatech.yml` |
 
 `shared/tasks/` bukan entry point Semaphore. File tersebut dipanggil oleh playbook yang membutuhkan task connectivity, prerequisite host, atau lifecycle Proxmox VM/LXC.
@@ -35,6 +36,8 @@ Archive/        # playbooks retired; tidak dipakai
 ## Disk-space monitoring
 
 `check-disk-space.yml` aman untuk emergency check pada Proxmox host, guest VM/LXC, dan VPS. Ia memakai `raw df` tanpa facts, APT, Python, atau write ke host. Jika `df` gagal, Semaphore mengirim alert kegagalan ke `ADW_NOTIF` dari controller.
+
+`check-proxmox-storage-health.yml` khusus Proxmox host. Ia alert `ADW_NOTIF` saat ZFS pool tidak `ONLINE`, mdraid degraded, atau SMART melaporkan status gagal. Tidak alert bila ZFS, mdraid, atau `smartctl` tidak tersedia.
 
 ## Dependencies
 
