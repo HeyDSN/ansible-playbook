@@ -56,6 +56,33 @@
       debug:
         var: storage_health_check
 
+    - name: Collect Proxmox storage health diagnostic details
+      raw: |
+        echo '=== ZFS ==='
+        if command -v zpool >/dev/null 2>&1; then
+          zpool list -o name,health 2>&1 || true
+        else
+          echo 'zpool is not installed'
+        fi
+
+        echo '=== MDRAID ==='
+        grep -E '^(Personalities|md[0-9]+)' /proc/mdstat 2>/dev/null || echo 'no mdraid arrays detected'
+
+        echo '=== SMART ==='
+        if command -v smartctl >/dev/null 2>&1; then
+          smartctl --scan-open 2>&1 || true
+        else
+          echo 'smartctl is not installed'
+        fi
+      register: storage_health_debug
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Debug Proxmox storage health diagnostic details
+      debug:
+        var: storage_health_debug
+
     - name: Initialize storage alerts
       set_fact:
         storage_alerts: []
