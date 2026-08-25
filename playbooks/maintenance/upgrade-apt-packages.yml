@@ -179,71 +179,10 @@
       set_fact:
         discord_message:
           embeds:
-            - title: "🔄 Apt Upgrade and Cleanup Report for {{ inventory_hostname }}"
-              color: "{{ '15158332' if reboot_required_file.stat.exists else '3066993' }}"
-              fields:
-                - name: "🖥️ Host"
-                  value: "{{ inventory_hostname }}"
-                  inline: true
-                - name: "📦 Upgraded Packages"
-                  value: "{{ upgradable_packages | length }}"
-                  inline: true
-                - name: "🗑️ Removed Packages"
-                  value: "{{ autoremovable_packages | length }}"
-                  inline: true
-                - name: "💾 Disk Space in Package Cache"
-                  value: "{{ disk_space_cache.stdout.split()[0] }}"
-                  inline: true
-                - name: "🔒 Held Packages"
-                  value: "{{ (manually_held_packages.stdout_lines + system_held_packages) | length }}"
-                  inline: true
-              description: |-
-                {% if reboot_required_file.stat.exists %}
-                **⚠️ REBOOT REQUIRED ⚠️**
-                A system restart is necessary to complete the upgrade process.
-                {% endif %}
-
-                {% if upgradable_packages | length > 0 %}
-                **📋 Upgraded Packages:**
-                ```
-                {% for package in upgradable_packages %}
-                • {{ package | regex_replace('^Inst\\s+(\\S+).*$', '\\1') }}
-                {% endfor %}
-                ```
-                {% else %}
-                **📋 No packages were upgraded in this run.**
-                {% endif %}
-
-                {% if autoremovable_packages | length > 0 %}
-                **🗑️ Autoremoved Packages:**
-                ```
-                {% for package in autoremovable_packages %}
-                • {{ package | regex_replace('^Remv\\s+(\\S+).*$', '\\1') }}
-                {% endfor %}
-                ```
-                {% else %}
-                **🗑️ No packages were autoremoved.**
-                {% endif %}
-
-                **🧹 Cleanup Operations:**
-                • Autoremove: {{ 'Performed' if autoremovable_packages | length > 0 else 'No packages to remove' }}
-                • Autoclean: Performed
-
-                {% if manually_held_packages.stdout_lines | length > 0 or system_held_packages | length > 0 %}
-                **🔒 Held Packages:**
-                ```
-                {% for package in manually_held_packages.stdout_lines %}
-                • {{ package }} (manually held)
-                {% endfor %}
-                {% for package in system_held_packages %}
-                • {{ package }} (system held)
-                {% endfor %}
-                ```
-                {% else %}
-                **🔓 No packages are being held back.**
-                {% endif %}
-              footer:
-                text: "Report generated on {{ ansible_date_time.iso8601 }}"
+            - title: "✅ APT maintenance succeeded"
+              description: "{{ inventory_hostname }} completed successfully."
+              color: 3066993
+              timestamp: "{{ ansible_date_time.iso8601 }}"
       when: should_notify
 
     - name: Send Discord notification
@@ -259,11 +198,6 @@
         - should_notify
         - discord_message.embeds | length > 0
         - lookup('env', 'ADW_UPDATE') | length > 0
-
-    - name: Display upgrade report (Debug)
-      debug:
-        var: discord_message
-      when: should_notify
 
   post_tasks:
     - name: Power off resource if it was originally off
