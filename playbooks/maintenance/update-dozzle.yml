@@ -71,3 +71,28 @@
       delay: 15
       failed_when: prune_result.failed | bool
       when: containers_updated and prune_job.ansible_job_id is defined
+
+    - name: Prepare Dozzle update notification
+      set_fact:
+        discord_message:
+          embeds:
+            - title: "🔄 Dozzle Updated: {{ inventory_hostname }}"
+              color: 3066993
+              description: "Latest Dozzle image has been pulled and applied."
+              footer:
+                text: "Updated on {{ lookup('pipe', 'date -u +\"%Y-%m-%dT%H:%M:%SZ\"') }}"
+      when: containers_updated | bool
+
+    - name: Send Dozzle update notification
+      uri:
+        url: "{{ lookup('env', 'ADW_NOTIF') }}"
+        method: POST
+        body_format: json
+        body: "{{ discord_message }}"
+        status_code: [200, 204]
+        timeout: 30
+      delegate_to: localhost
+      become: false
+      when:
+        - containers_updated | bool
+        - lookup('env', 'ADW_NOTIF') | length > 0
