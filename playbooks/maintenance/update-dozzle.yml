@@ -26,7 +26,12 @@
              | first
              | default('') }}
 
-    - name: Skip hosts without Dozzle
+    - name: Report hosts without Dozzle
+      debug:
+        msg: "Dozzle compose file not found; skipping {{ inventory_hostname }}."
+      when: compose_dir | length == 0
+
+    - name: End hosts without Dozzle
       meta: end_host
       when: compose_dir | length == 0
 
@@ -38,16 +43,6 @@
       register: compose_pull_job
       async: "{{ global_timeout }}"
       poll: 15
-
-    - name: Verify docker compose pull completed
-      async_status:
-        jid: "{{ compose_pull_job.ansible_job_id }}"
-      register: compose_result
-      until: compose_result.finished | bool
-      retries: 40
-      delay: 15
-      failed_when: compose_result.failed | bool
-      when: compose_pull_job.ansible_job_id is defined
 
     - name: Check if any containers were updated
       set_fact:
@@ -61,16 +56,6 @@
       when: containers_updated
       async: "{{ global_timeout }}"
       poll: 15
-
-    - name: Verify docker prune completed
-      async_status:
-        jid: "{{ prune_job.ansible_job_id }}"
-      register: prune_result
-      until: prune_result.finished | bool
-      retries: 20
-      delay: 15
-      failed_when: prune_result.failed | bool
-      when: containers_updated and prune_job.ansible_job_id is defined
 
     - name: Prepare Dozzle update notification
       set_fact:
