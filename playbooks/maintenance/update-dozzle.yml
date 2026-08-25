@@ -26,10 +26,37 @@
              | first
              | default('') }}
 
-    - name: Report hosts without Dozzle
-      debug:
-        msg: "Dozzle compose file not found; skipping {{ inventory_hostname }}."
+    - name: Find running Dozzle container when compose path is unknown
+      shell: |
+        set -o pipefail
+        docker ps --format '{% raw %}{{.ID}} {{.Image}}{% endraw %}' \
+          | awk '$2 ~ /^amir20\/dozzle([:@]|$)/ {print $1; exit}'
+      args:
+        executable: /bin/bash
+      register: dozzle_container
+      changed_when: false
+      failed_when: false
       when: compose_dir | length == 0
+
+    - name: Read Dozzle Compose working directory
+      shell: >-
+        docker inspect --format
+        '{% raw %}{{ index .Config.Labels "com.docker.compose.project.working_dir" }}{% endraw %}'
+        {{ dozzle_container.stdout | quote }}
+      register: discovered_compose_dir
+      changed_when: false
+      failed_when: false
+      when:
+        - compose_dir | length == 0
+        - dozzle_container.stdout | default('') | length > 0
+
+    - name: Use discovered Dozzle Compose directory
+      set_fact:
+        compose_dir: "{{ discovered_compose_dir.stdout | trim }}"
+      when:
+        - compose_dir | length == 0
+        - discovered_compose_dir.stdout | default('') | length > 0
+        - discovered_compose_dir.stdout | trim != '<no value>'
 
     - name: End hosts without Dozzle
       meta: end_host
