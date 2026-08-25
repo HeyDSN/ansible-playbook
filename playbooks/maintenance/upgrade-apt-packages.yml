@@ -28,7 +28,9 @@
   pre_tasks:
     - name: Include Proxmox resource management tasks
       include_tasks: ../../shared/tasks/proxmox-resource-lifecycle.yml
-      when: "'proxmox_vm_id' in hostvars[inventory_hostname]"
+      when:
+        - "'proxmox_vm_id' in hostvars[inventory_hostname]"
+        - not ansible_check_mode
 
     - name: Gather facts
       setup:
@@ -52,6 +54,7 @@
       command: apt-get -s upgrade
       register: upgrade_dry_run
       changed_when: false
+      check_mode: false
 
     - name: Parse upgradable packages
       set_fact:
@@ -61,16 +64,19 @@
       shell: apt-mark showhold
       register: manually_held_packages
       changed_when: false
+      check_mode: false
 
     - name: Get list of all upgradable packages
       shell: apt list --upgradable 2>/dev/null | grep -v '^Listing...' | cut -d'/' -f1
       register: all_upgradable_packages
       changed_when: false
+      check_mode: false
 
     - name: Get list of packages that would be upgraded
       shell: apt-get --simulate dist-upgrade | grep '^Inst' | awk '{print $2}'
       register: would_be_upgraded
       changed_when: false
+      check_mode: false
 
     - name: Identify system-held packages
       set_fact:
@@ -83,6 +89,7 @@
         || true
       register: installed_docker_packages
       changed_when: false
+      check_mode: false
       when: ansible_virtualization_type == 'lxc'
 
     - name: Select Docker packages to temporarily hold
@@ -129,6 +136,7 @@
       command: apt-get --dry-run autoremove
       register: autoremove_dry_run
       changed_when: false
+      check_mode: false
 
     - name: Parse autoremovable packages
       set_fact:
@@ -156,6 +164,7 @@
       shell: du -sh /var/cache/apt/archives
       register: disk_space_cache
       changed_when: false
+      check_mode: false
 
     - name: Set notification flag
       set_fact:
@@ -277,6 +286,7 @@
         - original_resource_state is defined
         - original_resource_state == 'stopped'
         - "'proxmox_vm_id' in hostvars[inventory_hostname]"
+        - not ansible_check_mode
 
     - name: Send power off notification
       uri:
@@ -304,4 +314,5 @@
         - original_resource_state is defined
         - original_resource_state == 'stopped'
         - "'proxmox_vm_id' in hostvars[inventory_hostname]"
+        - not ansible_check_mode
         - lookup('env', 'ADW_PROXMOX') | length > 0
