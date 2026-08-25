@@ -1,5 +1,5 @@
 ---
-- hosts: grid_master
+- hosts: all
   gather_facts: false
   become: true
   vars_files:
@@ -26,9 +26,8 @@
              | first
              | default('') }}
 
-    - name: Fail if docker-compose.yml doesn't exist
-      fail:
-        msg: "docker-compose.yml not found in any supported location: {{ compose_dirs | join(', ') }}"
+    - name: Skip hosts without Dozzle
+      meta: end_host
       when: compose_dir | length == 0
 
     - name: Pull latest images and check for updates
