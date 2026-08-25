@@ -47,5 +47,4 @@
         - ansible_virtualization_type == "lxc"
         - not pve_check.stat.exists
 
-  become: yes
-  ignore_errors: yes
+  become: true

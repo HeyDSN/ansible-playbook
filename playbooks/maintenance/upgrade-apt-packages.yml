@@ -3,10 +3,10 @@
   gather_facts: false
   become: true
 
+  vars_files:
+    - ../../shared/vars/connection-defaults.yml
   vars:
-    ansible_remote_tmp: /tmp
     ansible_ssh_args: '-o ControlMaster=auto -o ControlPersist=10m -o ConnectTimeout=30 -o ServerAliveInterval=15 -o ServerAliveCountMax=3'
-    ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
 
     proxmox_host: "{{ lookup('env', 'PROXMOX_HOST') }}"
     proxmox_node: "{{ lookup('env', 'PROXMOX_NODE') }}"
@@ -27,14 +27,14 @@
 
   pre_tasks:
     - name: Include Proxmox resource management tasks
-      include_tasks: _proxmox-vm-management.yml
+      include_tasks: ../../shared/tasks/proxmox-resource-lifecycle.yml
       when: "'proxmox_vm_id' in hostvars[inventory_hostname]"
 
     - name: Gather facts
       setup:
 
     - name: Include pre-requisite tasks
-      include_tasks: _prereq_tasks.yml
+      include_tasks: ../../shared/tasks/prerequisites.yml
 
     - name: Initialize Discord message (always)
       set_fact:
@@ -42,19 +42,10 @@
           embeds: []
 
   tasks:
-    - name: Kill stuck apt/dpkg processes
-      shell: |
-        pkill -9 apt-get 2>/dev/null || true
-        pkill -9 dpkg 2>/dev/null || true
-        sleep 1
-        rm -f /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/cache/apt/archives/lock 2>/dev/null || true
-        dpkg --configure -a 2>/dev/null || true
-      ignore_errors: yes
-      changed_when: false
-
     - name: Update apt cache
       apt:
         update_cache: yes
+        lock_timeout: "{{ apt_timeout }}"
       register: apt_update_result
 
     - name: Get upgradable packages (dry-run)
@@ -85,13 +76,48 @@
       set_fact:
         system_held_packages: "{{ all_upgradable_packages.stdout_lines | difference(would_be_upgraded.stdout_lines) | difference(manually_held_packages.stdout_lines) }}"
 
+    - name: Find installed Docker packages on LXC
+      shell: >-
+        dpkg-query -W -f='${Package}\n'
+        | grep -E '^(docker.io|docker-ce|docker-ce-cli|docker-ce-rootless-extras|docker-buildx-plugin|docker-compose-plugin|containerd|containerd.io|runc)$'
+        || true
+      register: installed_docker_packages
+      changed_when: false
+      when: ansible_virtualization_type == 'lxc'
+
+    - name: Select Docker packages to temporarily hold
+      set_fact:
+        docker_packages_to_hold: "{{ installed_docker_packages.stdout_lines | difference(manually_held_packages.stdout_lines) }}"
+      when: ansible_virtualization_type == 'lxc'
+
+    - name: Temporarily hold Docker packages on LXC
+      command:
+        argv:
+          - apt-mark
+          - hold
+          - "{{ item }}"
+      loop: "{{ docker_packages_to_hold }}"
+      when: docker_packages_to_hold | default([]) | length > 0
+
     - name: Perform apt upgrade
-      apt:
-        upgrade: yes
-        force_apt_get: yes
-        dpkg_options: 'force-confdef,force-confold'
-      register: apt_upgrade_result
-      when: upgradable_packages | length > 0
+      block:
+        - name: Upgrade packages excluding temporarily held Docker packages
+          apt:
+            upgrade: yes
+            force_apt_get: yes
+            dpkg_options: 'force-confdef,force-confold'
+            lock_timeout: "{{ apt_timeout }}"
+          register: apt_upgrade_result
+          when: upgradable_packages | length > 0
+      always:
+        - name: Release temporary Docker package holds
+          command:
+            argv:
+              - apt-mark
+              - unhold
+              - "{{ item }}"
+          loop: "{{ docker_packages_to_hold }}"
+          when: docker_packages_to_hold | default([]) | length > 0
 
     - name: Fix any broken packages after upgrade
       shell: apt-get -f install -y
@@ -112,12 +138,14 @@
       apt:
         autoremove: yes
         force_apt_get: yes
+        lock_timeout: "{{ apt_timeout }}"
       when: autoremovable_packages | length > 0
 
     - name: Perform apt autoclean
       apt:
         autoclean: yes
         force_apt_get: yes
+        lock_timeout: "{{ apt_timeout }}"
 
     - name: Check if reboot is required
       stat:
@@ -245,28 +273,33 @@
           delegate_to: localhost
           become: false
 
-        - name: Send power off notification
-          uri:
-            url: "{{ lookup('env', 'ADW_PROXMOX') }}"
-            method: POST
-            body_format: json
-            body:
-              embeds:
-                - title: "🔴 Proxmox Resource Powered Off"
-                  color: 15158332
-                  fields:
-                    - name: "Resource"
-                      value: "{{ inventory_hostname }}"
-                    - name: "Type"
-                      value: "{{ 'VM' if resource_type == 'qemu' else 'LXC Container' }}"
-                    - name: "ID"
-                      value: "{{ proxmox_vm_id }}"
-                  description: "The resource was powered off after completing maintenance tasks."
-                  footer:
-                    text: "Powered off at {{ ansible_date_time.iso8601 }}"
-            status_code: [204, 200]
-          delegate_to: localhost
-          become: false
+      when:
+        - original_resource_state is defined
+        - original_resource_state == 'stopped'
+        - "'proxmox_vm_id' in hostvars[inventory_hostname]"
+
+    - name: Send power off notification
+      uri:
+        url: "{{ lookup('env', 'ADW_PROXMOX') }}"
+        method: POST
+        body_format: json
+        body:
+          embeds:
+            - title: "🔴 Proxmox Resource Powered Off"
+              color: 15158332
+              fields:
+                - name: "Resource"
+                  value: "{{ inventory_hostname }}"
+                - name: "Type"
+                  value: "{{ 'VM' if resource_type == 'qemu' else 'LXC Container' }}"
+                - name: "ID"
+                  value: "{{ proxmox_vm_id }}"
+              description: "The resource was powered off after completing maintenance tasks."
+              footer:
+                text: "Powered off at {{ ansible_date_time.iso8601 }}"
+        status_code: [204, 200]
+      delegate_to: localhost
+      become: false
       when:
         - original_resource_state is defined
         - original_resource_state == 'stopped'

@@ -1,15 +1,13 @@
 ---
 - hosts: grid_master
-  gather_facts: no
-  become: yes
+  gather_facts: false
+  become: true
+  vars_files:
+    - ../../shared/vars/connection-defaults.yml
   vars:
-    ansible_remote_tmp: /tmp
-    ansible_ssh_args: '-o ControlMaster=auto -o ControlPersist=10m'
-    ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
     compose_dirs:
       - /home/ubuntu/dozzle
       - /root/dozzle
-    global_timeout: 600  # 10 minutes in seconds
 
   tasks:
     - name: Check for docker-compose.yml in supported locations
