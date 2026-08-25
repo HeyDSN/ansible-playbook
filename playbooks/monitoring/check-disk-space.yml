@@ -1,112 +1,119 @@
 ---
-- hosts: all
+- name: Monitor disk space
+  hosts: all
   gather_facts: false
-  become: true
+  become: false
   ignore_unreachable: true
+
   vars_files:
     - ../../shared/vars/connection-defaults.yml
   vars:
     threshold_percent: 80
     playbook_name: "check-disk-space.yml"
+    notification_webhook: "{{ lookup('env', 'ADW_NOTIF') }}"
 
   pre_tasks:
     - name: Check host connectivity
-      include_tasks: 
+      include_tasks:
         file: ../../shared/tasks/host-connectivity.yml
         apply:
           vars:
             task_name: "Pre-check for Check Disk Space"
-            notification_webhook: "{{ lookup('env', 'ADW_NOTIF') }}"
-
-    - name: Gather facts
-      setup:
-      when: not host_is_unreachable | default(false)
-      async: "{{ global_timeout }}"
-      poll: 5
-
-    - name: Include pre-requisite tasks
-      include_tasks: ../../shared/tasks/prerequisites.yml
 
   tasks:
-    - name: Create disk usage parser script
-      ansible.builtin.copy:
-        content: |
-          #!/usr/bin/env python3
-          import sys
-          import json
+    - name: Initialize disk usage results
+      set_fact:
+        disks_over_threshold: []
 
-          threshold = int(sys.argv[1])
-          disks_over_threshold = []
-
-          for line in sys.stdin:
-              parts = line.strip().split()
-              if len(parts) == 3:
-                  device, usage, mount = parts
-                  usage_percent = int(usage.rstrip('%'))
-                  if usage_percent > threshold:
-                      disks_over_threshold.append({
-                          'device': device,
-                          'usage': usage_percent,
-                          'mount': mount
-                      })
-
-          print(json.dumps(disks_over_threshold))
-        dest: /tmp/parse_disk_usage.py
-        mode: '0755'
-
-    - name: Get disk space usage and parse
-      ansible.builtin.shell: LC_ALL=C df -P -h | awk '{if (NR!=1) {print $1,$5,$6}}' | grep -vE '^tmpfs|^udev|^/dev/loop' | python3 /tmp/parse_disk_usage.py {{ threshold_percent }}
-      register: parsed_disk_usage
+    - name: Collect disk usage without writing to the host
+      raw: |
+        LC_ALL=C df -P -h | awk -v threshold='{{ threshold_percent | int }}' '
+          NR > 1 && $1 !~ /^(tmpfs|udev|\/dev\/loop)/ {
+            usage = $5
+            sub(/%$/, "", usage)
+            if (usage + 0 > threshold) {
+              mount = $6
+              for (i = 7; i <= NF; i++) mount = mount " " $i
+              printf "%s\t%s\t%s\n", $1, usage, mount
+            }
+          }
+        '
+      register: disk_usage
       changed_when: false
+      failed_when: false
+      check_mode: false
 
-    - name: Set fact for disks over threshold
-      ansible.builtin.set_fact:
-        disks_over_threshold: "{{ parsed_disk_usage.stdout | from_json }}"
+    - name: Send disk check failure notification
+      uri:
+        url: "{{ notification_webhook }}"
+        method: POST
+        body_format: json
+        body:
+          embeds:
+            - title: "⚠️ Disk Space Check Failed: {{ inventory_hostname }}"
+              color: 15158332
+              description: >-
+                Could not collect disk usage. {{ disk_usage.stderr | default('No error output') | truncate(900, true) }}
+              footer:
+                text: "Report generated on {{ lookup('pipe', 'date -u +\"%Y-%m-%dT%H:%M:%SZ\"') }}"
+        status_code: [200, 204]
+        timeout: 30
+      delegate_to: localhost
+      become: false
+      when:
+        - disk_usage.rc | default(1) != 0
+        - notification_webhook | length > 0
 
-    - name: Prepare Discord notification message
-      ansible.builtin.set_fact:
+    - name: Record disks over threshold
+      set_fact:
+        disks_over_threshold: >-
+          {{ disks_over_threshold + [{
+            'device': item.split('\t', 2)[0],
+            'usage': item.split('\t', 2)[1] | int,
+            'mount': item.split('\t', 2)[2]
+          }] }}
+      loop: "{{ disk_usage.stdout_lines | default([]) }}"
+      when:
+        - disk_usage.rc | default(1) == 0
+        - item.split('\t', 2) | length == 3
+
+    - name: Prepare disk space notification
+      set_fact:
         discord_message:
           embeds:
             - title: "💾 Disk Space Alert for {{ inventory_hostname }}"
-              color: 15158332  # Red color
+              color: 15158332
               fields:
-                - name: "🖥️ Host"
-                  value: "{{ inventory_hostname }}"
-                  inline: true
-                - name: "🚨 Threshold"
+                - name: "Threshold"
                   value: "{{ threshold_percent }}%"
                   inline: true
-                - name: "🔴 Disks Over Threshold"
+                - name: "Disks over threshold"
                   value: "{{ disks_over_threshold | length }}"
                   inline: true
               description: |-
-                The following disks are over {{ threshold_percent }}% usage:
-
                 {% for disk in disks_over_threshold %}
-                **📀 Device:** `{{ disk.device }}`
-                **📊 Usage:** `{{ disk.usage }}%`
-                **📁 Mount:** `{{ disk.mount }}`
-                
-                {% endfor %}
-                
-                Please check and free up space if necessary.
-              footer:
-                text: "Report generated on {{ ansible_date_time.iso8601 }}"
-      when: disks_over_threshold | length > 0
+                **Device:** `{{ disk.device }}`
+                **Usage:** `{{ disk.usage }}%`
+                **Mount:** `{{ disk.mount }}`
 
-    - name: Send Discord notification
-      ansible.builtin.uri:
-        url: "{{ lookup('env', 'ADW_NOTIF') }}"
+                {% endfor %}
+              footer:
+                text: "Report generated on {{ lookup('pipe', 'date -u +\"%Y-%m-%dT%H:%M:%SZ\"') }}"
+      when:
+        - disk_usage.rc | default(1) == 0
+        - disks_over_threshold | length > 0
+
+    - name: Send disk space notification
+      uri:
+        url: "{{ notification_webhook }}"
         method: POST
         body_format: json
         body: "{{ discord_message }}"
-        status_code: [204, 200]  # Accept both 204 and 200 as success
-      when: 
+        status_code: [200, 204]
+        timeout: 30
+      delegate_to: localhost
+      become: false
+      when:
+        - disk_usage.rc | default(1) == 0
         - disks_over_threshold | length > 0
-        - lookup('env', 'ADW_NOTIF') | length > 0
-      async: "{{ global_timeout }}"
-      poll: 5
-
-    - name: Debug disk usage (always show)
-      ansible.builtin.debug:
-        var: disks_over_threshold
+        - notification_webhook | length > 0

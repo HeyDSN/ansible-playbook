@@ -32,6 +32,10 @@ Archive/        # playbooks retired; tidak dipakai
 
 `upgrade-apt-packages.yml` mendeteksi host LXC lewat `ansible_virtualization_type`. Paket Docker yang terpasang (`docker.io`, Docker CE/plugin, `containerd`, dan `runc`) di-hold sementara selama upgrade, lalu dikembalikan ke state hold sebelumnya. Host non-LXC tetap mendapat upgrade normal.
 
+## Disk-space monitoring
+
+`check-disk-space.yml` aman untuk emergency check pada Proxmox host, guest VM/LXC, dan VPS. Ia memakai `raw df` tanpa facts, APT, Python, atau write ke host. Jika `df` gagal, Semaphore mengirim alert kegagalan ke `ADW_NOTIF` dari controller.
+
 ## Dependencies
 
 `update-dozzle.yml` memerlukan collection `community.docker`:
