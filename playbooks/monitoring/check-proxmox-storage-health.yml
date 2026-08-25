@@ -52,6 +52,10 @@
       failed_when: false
       check_mode: false
 
+    - name: Debug raw Proxmox storage health check
+      debug:
+        var: storage_health_check
+
     - name: Initialize storage alerts
       set_fact:
         storage_alerts: []
@@ -65,6 +69,10 @@
           }] }}
       loop: "{{ storage_health_check.stdout_lines | default([]) }}"
       when: item is match('^[^|]+\\|.+$')
+
+    - name: Debug parsed Proxmox storage alerts
+      debug:
+        var: storage_alerts
 
     - name: Send Proxmox storage health alert
       uri:
