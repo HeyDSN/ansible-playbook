@@ -19,6 +19,8 @@
     discord_webhook_url: "{{ lookup('env', 'ADW_CERTBOT') }}"
     certbot_log_file: "/var/log/letsencrypt/letsencrypt.log"
     certbot_temp_log: "/tmp/certbot.log"
+    certbot_renewed_domains_file: "/tmp/certbot-renewed-domains.txt"
+    certbot_deploy_hook: "/tmp/certbot-record-renewed-domains.sh"
 
   tasks:
     - name: Ensure letsencrypt log directory exists
@@ -32,11 +34,29 @@
         path: "{{ certbot_log_file }}"
         state: absent
 
+    - name: Initialize exact renewed domains report
+      shell: ": > {{ certbot_renewed_domains_file | quote }}"
+      changed_when: false
+
+    - name: Create Certbot deploy hook for exact domain reporting
+      copy:
+        dest: "{{ certbot_deploy_hook }}"
+        mode: "0700"
+        content: |
+          #!/bin/sh
+          certificate_name="$(basename "$RENEWED_LINEAGE")"
+          openssl x509 -in "$RENEWED_LINEAGE/cert.pem" -noout -ext subjectAltName 2>/dev/null \
+            | sed -n '/^[[:space:]]*DNS:/ { s/^[[:space:]]*DNS://; s/, DNS:/\n/g; p; }' \
+            | while IFS= read -r domain; do
+                [ -n "$domain" ] && printf '%s|%s\n' "$certificate_name" "$domain" >> "{{ certbot_renewed_domains_file }}"
+              done
+          exit 0
+
     - name: Renew Let's Encrypt certificates
       shell: |
         set -o pipefail
         for i in {1..3}; do
-          if certbot renew --dns-cloudflare --non-interactive -v 2>&1 | tee "{{ certbot_temp_log }}"; then
+          if certbot renew --dns-cloudflare --non-interactive -v --deploy-hook "{{ certbot_deploy_hook }}" 2>&1 | tee "{{ certbot_temp_log }}"; then
             exit 0
           fi
           echo "Renewal attempt $i failed. Retrying in 60 seconds..." >&2
@@ -70,21 +90,44 @@
             certbot_result.stdout_lines
             | select('search', '^Renewing an existing certificate for')
             | map('regex_replace', '^Renewing an existing certificate for ', '')
-            | map('regex_replace', ' and ([0-9]+) more$', ' (+\\1 more domains)')
+            | map('regex_replace', ' more$', ' more domains')
             | list
           }}
 
+    - name: Read exact renewed domains from Certbot deploy hook
+      slurp:
+        src: "{{ certbot_renewed_domains_file }}"
+      register: renewed_domains_report
+      changed_when: false
+      failed_when: false
+
+    - name: Initialize exact renewed domain records
+      set_fact:
+        renewed_domain_records: []
+
+    - name: Record exact domains for renewed certificates
+      set_fact:
+        renewed_domain_records: >-
+          {{ renewed_domain_records + [{
+            'certificate': item.split('|', 1)[0],
+            'domain': item.split('|', 1)[1]
+          }] }}
+      loop: "{{ (renewed_domains_report.content | default('') | b64decode).splitlines() }}"
+      when: item is match('^[^|]+\\|.+$')
+
     - name: Prepare Discord renewal details
       set_fact:
-        renewed_domains_text: "{{ renewed_domains | join(\"\n\") }}"
-        renewal_summary_text: >-
-          {{
-            certbot_result.stdout_lines
-            | select('search', 'Congratulations|successfully renewed|Renewing an existing certificate')
-            | list
-            | join("\n")
-            | truncate(900, True, '...')
-          }}
+        renewed_domains_text: |
+          {% if renewed_domain_records | length > 0 %}
+          {% for certificate_name in renewed_domain_records | map(attribute='certificate') | unique | list %}
+          **{{ certificate_name }}**
+          {% for domain in renewed_domain_records | selectattr('certificate', 'equalto', certificate_name) | map(attribute='domain') %}
+          • `{{ domain }}`
+          {% endfor %}
+          {% endfor %}
+          {% else %}
+          {{ renewed_domains | join('\n') }}
+          {% endif %}
       when: renewed_domains | length > 0
 
     - name: Send Discord webhook notification for successful renewal
@@ -96,18 +139,26 @@
         body_format: json
         body:
           embeds:
-            - title: "Let's Encrypt Renewal Successful"
-              description: "Certificates renewed on `{{ inventory_hostname }}`"
+            - title: "🔐 Let's Encrypt Certificate Renewed"
+              description: "Certificate renewal completed and Nginx was reloaded successfully."
               color: 3066993
               fields:
-                - name: "Renewed Domains"
+                - name: "🖥️ Host"
+                  value: "`{{ inventory_hostname }}`"
+                  inline: true
+                - name: "Renewed Certificates & Domains"
                   value: "{{ renewed_domains_text }}"
-                - name: "Renewal Summary"
-                  value: "{{ renewal_summary_text }}"
-              timestamp: "{{ ansible_date_time.iso8601 }}"
+                - name: "✅ Status"
+                  value: "Certbot successful; Nginx configuration validated and reloaded."
+              footer:
+                text: "Completed {{ lookup('pipe', 'date -u +\"%Y-%m-%dT%H:%M:%SZ\"') }}"
       when: renewed_domains | length > 0
 
-    - name: Remove temporary certbot log
+    - name: Remove temporary Certbot files
       file:
-        path: "{{ certbot_temp_log }}"
+        path: "{{ item }}"
         state: absent
+      loop:
+        - "{{ certbot_temp_log }}"
+        - "{{ certbot_renewed_domains_file }}"
+        - "{{ certbot_deploy_hook }}"
