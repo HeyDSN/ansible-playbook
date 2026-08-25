@@ -8,11 +8,29 @@
     url: "https://{{ proxmox_host }}/api2/json/nodes/{{ proxmox_node }}/{{ resource_type }}/{{ proxmox_vm_id }}/status/current"
     method: GET
     validate_certs: no
+    return_content: true
+    status_code: 200
     headers:
       Authorization: "{{ proxmox_api_token }}"
   register: resource_state
   delegate_to: localhost
   become: false
+
+- name: Validate Proxmox resource state response
+  assert:
+    that:
+      - resource_state.content is defined
+      - resource_state.content is match('^\\s*\\{')
+    fail_msg: >-
+      Proxmox resource state API did not return JSON for {{ inventory_hostname }}
+      (HTTP {{ resource_state.status | default('unknown') }}):
+      {{ resource_state.content | default('empty response') | truncate(500, true) }}
+  delegate_to: localhost
+  become: false
+
+- name: Set Proxmox resource status
+  set_fact:
+    resource_status: "{{ (resource_state.content | from_json)['data']['status'] }}"
 
 - name: Power on resource if it's off
   uri:
@@ -23,7 +41,7 @@
       Authorization: "{{ proxmox_api_token }}"
   delegate_to: localhost
   become: false
-  when: resource_state.json.data.status == 'stopped'
+  when: resource_status == 'stopped'
 
 - name: Send power on notification
   uri:
@@ -48,7 +66,7 @@
   delegate_to: localhost
   become: false
   when:
-    - resource_state.json.data.status == 'stopped'
+    - resource_status == 'stopped'
     - lookup('env', 'ADW_PROXMOX') | length > 0
 
 - name: Wait for resource to be accessible
@@ -57,10 +75,10 @@
     port: 22
     delay: 30
     timeout: 300
-  when: resource_state.json.data.status == 'stopped'
+  when: resource_status == 'stopped'
   delegate_to: localhost
   become: false
 
 - name: Set fact for original resource state
   set_fact:
-    original_resource_state: "{{ resource_state.json.data.status }}"
+    original_resource_state: "{{ resource_status }}"
