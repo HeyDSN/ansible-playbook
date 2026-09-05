@@ -137,6 +137,7 @@
         headers:
           Content-Type: "application/json"
         body_format: json
+        status_code: [200, 204]
         body:
           embeds:
             - title: "🔐 Let's Encrypt Certificate Renewed"
